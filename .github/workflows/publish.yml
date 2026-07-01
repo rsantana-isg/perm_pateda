@@ -1,0 +1,54 @@
+name: Publish perm_pateda to PyPI
+
+# Publishes the `perm_pateda` package to PyPI whenever a version tag is pushed.
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# This file lives at the ROOT of the standalone `perm_pateda` repo
+# (rsantana-isg/perm_pateda), where pyproject.toml and src/ also live.
+#
+# Uses PyPI Trusted Publishing (OIDC): no API tokens are stored as secrets.
+# perm_pateda depends on `pateda` (which depends on `bayes_nets`), so those two
+# must already be on PyPI before this release runs.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-publish:
+    name: Build and publish to PyPI
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/perm_pateda/
+    permissions:
+      id-token: write        # required for Trusted Publishing (OIDC)
+      contents: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Build sdist and wheel
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+          python -m twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+# ---------------------------------------------------------------------------
+# One-time PyPI configuration (Trusted Publisher) for project "perm_pateda":
+#   https://pypi.org/manage/account/publishing/  ->  add a pending publisher
+#     PyPI project name : perm_pateda
+#     Owner             : rsantana-isg
+#     Repository name   : perm_pateda
+#     Workflow filename : publish.yml
+#     Environment name  : pypi
+# ---------------------------------------------------------------------------
