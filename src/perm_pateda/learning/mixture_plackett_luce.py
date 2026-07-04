@@ -582,7 +582,7 @@ class LearnPlackettLuceMixture:
     ) -> Dict[str, Any]:
         data = np.asarray(population, dtype=int)
         m, n = data.shape
-        K = self.n_components  # ← antes era parámetro, ahora self
+        K = self.n_components  
 
         rng = np.random.default_rng(self.random_state)  # ← idem
 

@@ -94,8 +94,14 @@ class SampleEHM:
                 current_item = current_perm[-1]
                 probs = ehm_matrix[current_item, remaining].copy()
 
-                # Normalize probabilities
-                probs = probs / np.sum(probs)
+                # Normalize probabilities (fall back to uniform if the
+                # histogram gives zero probability to every remaining
+                # candidate, matching SampleNHM's behaviour).
+                prob_sum = np.sum(probs)
+                if prob_sum > 0:
+                    probs = probs / prob_sum
+                else:
+                    probs = np.ones(len(remaining)) / len(remaining)
 
                 # Sample next item using stochastic universal sampling
                 next_item_idx = self._sample_categorical(probs, rng)

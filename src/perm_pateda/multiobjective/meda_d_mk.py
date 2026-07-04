@@ -70,7 +70,11 @@ class MEDA_D_MK:
         shake_strength: int = 3,
         minimize: Tuple[bool, ...] = None,
         seed: Optional[int] = None,
+        mutation_fn: Optional[Callable[[np.ndarray, np.random.Generator], np.ndarray]] = None,
+        mutation_rate: float = 0.0,
     ):
+        self.mutation_fn = mutation_fn
+        self.mutation_rate = mutation_rate
         self.objectives = objectives
         self.n_obj = len(objectives)
         self.n = n
@@ -287,6 +291,9 @@ class MEDA_D_MK:
                     child = self._generate_candidate(centre)
                     trial += 1
 
+                if self.mutation_fn is not None and self.rng.random() < self.mutation_rate:
+                    child = self.mutation_fn(child, self.rng)
+
                 child_obj = self._evaluate(child)
                 self._update_reference(child_obj)
                 self._update_worst(child_obj)
@@ -379,7 +386,11 @@ class MEDA_D_KENDALL:
         minimize: Tuple[bool, ...] = None,
         seed: Optional[int] = None,
         selection_ratio: float = 0.5,
+        mutation_fn: Optional[Callable[[np.ndarray, np.random.Generator], np.ndarray]] = None,
+        mutation_rate: float = 0.0,
     ):
+        self.mutation_fn = mutation_fn
+        self.mutation_rate = mutation_rate
         self.objectives = objectives
         self.n_obj = len(objectives)
         self.n = n
@@ -606,6 +617,9 @@ class MEDA_D_KENDALL:
                     child = self._generate_candidate(k)
                     trial += 1
 
+                if self.mutation_fn is not None and self.rng.random() < self.mutation_rate:
+                    child = self.mutation_fn(child, self.rng)
+
                 child_obj = self._evaluate(child)
                 self._update_reference(child_obj)
                 self._update_worst(child_obj)
@@ -699,7 +713,11 @@ class MEDA_D_ULAM:
         burn_in: int = 200,
         step_size: int = 20,
         selection_ratio: float = 0.5,
+        mutation_fn: Optional[Callable[[np.ndarray, np.random.Generator], np.ndarray]] = None,
+        mutation_rate: float = 0.0,
     ):
+        self.mutation_fn = mutation_fn
+        self.mutation_rate = mutation_rate
         self.objectives = objectives
         self.n_obj = len(objectives)
         self.n = n
@@ -925,6 +943,9 @@ class MEDA_D_ULAM:
                     child = self._generate_candidate(k)
                     trial += 1
 
+                if self.mutation_fn is not None and self.rng.random() < self.mutation_rate:
+                    child = self.mutation_fn(child, self.rng)
+
                 child_obj = self._evaluate(child)
                 self._update_reference(child_obj)
                 self._update_worst(child_obj)
@@ -1017,7 +1038,11 @@ class MEDA_D_GMKENDALL:
         minimize: Tuple[bool, ...] = None,
         seed: Optional[int] = None,
         selection_ratio: float = 0.5,
+        mutation_fn: Optional[Callable[[np.ndarray, np.random.Generator], np.ndarray]] = None,
+        mutation_rate: float = 0.0,
     ):
+        self.mutation_fn = mutation_fn
+        self.mutation_rate = mutation_rate
         self.objectives = objectives
         self.n_obj = len(objectives)
         self.n = n
@@ -1244,6 +1269,9 @@ class MEDA_D_GMKENDALL:
                     child = self._generate_candidate(k)
                     trial += 1
 
+                if self.mutation_fn is not None and self.rng.random() < self.mutation_rate:
+                    child = self.mutation_fn(child, self.rng)
+
                 child_obj = self._evaluate(child)
                 self._update_reference(child_obj)
                 self._update_worst(child_obj)
@@ -1336,7 +1364,11 @@ class MEDA_D_GMCAYLEY:
         minimize: Tuple[bool, ...] = None,
         seed: Optional[int] = None,
         selection_ratio: float = 0.5,
+        mutation_fn: Optional[Callable[[np.ndarray, np.random.Generator], np.ndarray]] = None,
+        mutation_rate: float = 0.0,
     ):
+        self.mutation_fn = mutation_fn
+        self.mutation_rate = mutation_rate
         self.objectives = objectives
         self.n_obj = len(objectives)
         self.n = n
@@ -1561,6 +1593,9 @@ class MEDA_D_GMCAYLEY:
                         break
                     child = self._generate_candidate(k)
                     trial += 1
+
+                if self.mutation_fn is not None and self.rng.random() < self.mutation_rate:
+                    child = self.mutation_fn(child, self.rng)
 
                 child_obj = self._evaluate(child)
                 self._update_reference(child_obj)
