@@ -29,9 +29,7 @@ src/perm_pateda/learning/plackett_luce.py
 src/perm_pateda/multiobjective/__init__.py
 src/perm_pateda/multiobjective/fourier_moead.py
 src/perm_pateda/multiobjective/meda_d_f.py
-src/perm_pateda/multiobjective/meda_d_hm.py
 src/perm_pateda/multiobjective/meda_d_mk.py
-src/perm_pateda/multiobjective/meda_d_pl.py
 src/perm_pateda/multiobjective/moead.py
 src/perm_pateda/multiobjective/pareto.py
 src/perm_pateda/multiobjective/scalarization.py
