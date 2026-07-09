@@ -1,10 +1,17 @@
 """Permutation sampling methods.
 
-Histogram samplers (edge / node) and distance-based samplers for the Mallows
-and Generalized Mallows models under Kendall's-tau and Cayley distances.
+Histogram samplers (edge / node), distance-based samplers for the Mallows
+and Generalized Mallows models under Kendall's-tau and Cayley distances,
+and Doubly Stochastic Matrix (DSM) samplers (PS and AS variants).
 """
 
 from perm_pateda.sampling.histogram import SampleEHM, SampleNHM, sample_ehm, sample_nhm
+from perm_pateda.sampling.dsm import (
+    SampleDSMPS,
+    SampleDSMAS,
+    sample_dsm_ps,
+    sample_dsm_as,
+)
 from perm_pateda.sampling.mallows import (
     SampleMallowsKendall,
     SampleMallowsCayley,
@@ -24,6 +31,10 @@ __all__ = [
     "SampleNHM",
     "sample_ehm",
     "sample_nhm",
+    "SampleDSMPS",
+    "SampleDSMAS",
+    "sample_dsm_ps",
+    "sample_dsm_as",
     "SampleMallowsKendall",
     "SampleMallowsCayley",
     "SampleMallowsUlam",

@@ -38,6 +38,13 @@ from perm_pateda.algorithms.permutation import (
     PlackettLuceEDA,
     PlackettLuceMixtureEDA,
     HammingKMMEDA,
+    DSMPSEDA,
+    DSMASEDA,
+)
+from perm_pateda.algorithms.random_keys import (
+    RKGaussianUMDAEDA,
+    RKGaussianFullEDA,
+    RKCopulaVinesEDA,
 )
 
 # Permutation distance metrics and consensus (central-permutation) estimators
@@ -59,6 +66,13 @@ from perm_pateda.utils.benchmark_parsers import (
     parse_qaplib,
     parse_tsplib,
 )
+from perm_pateda.random_keys import (
+    permutation_to_random_keys,
+    random_keys_to_permutation,
+    random_keys_to_ranks,
+    rescale_random_keys,
+)
+
 from perm_pateda.utils.stats_utils import (
     summary_table,
     friedman_test,
@@ -72,12 +86,17 @@ __all__ = [
     "NHMEDA",
     "MallowsKendallEDA",
     "MallowsCayleyEDA",
-    "MallowsUlamEDA"
+    "MallowsUlamEDA",
     "GMallowsKendallEDA",
     "GMallowsCayleyEDA",
     "PlackettLuceEDA",
-    "PlackettLuceMixtureEDA"
+    "PlackettLuceMixtureEDA",
     "HammingKMMEDA",
+    "DSMPSEDA",
+    "DSMASEDA",
+    "RKGaussianUMDAEDA",
+    "RKGaussianFullEDA",
+    "RKCopulaVinesEDA",
     # Distances
     "kendall_distance",
     "cayley_distance",
@@ -96,5 +115,10 @@ __all__ = [
     "friedman_test",
     "wilcoxon_pairwise",
     "critical_difference_plot",
+    # Random-key utilities
+    "permutation_to_random_keys",
+    "random_keys_to_permutation",
+    "random_keys_to_ranks",
+    "rescale_random_keys",
 
 ]

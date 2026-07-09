@@ -1,10 +1,12 @@
 """Permutation model learning methods.
 
-Histogram models (edge / node) and distance-based exponential models
-(Mallows and Generalized Mallows under Kendall's-tau and Cayley distances).
+Histogram models (edge / node), distance-based exponential models
+(Mallows and Generalized Mallows under Kendall's-tau and Cayley distances),
+and Doubly Stochastic Matrix (DSM) models.
 """
 
 from perm_pateda.learning.histogram import LearnEHM, LearnNHM, learn_ehm, learn_nhm
+from perm_pateda.learning.dsm import LearnDSM, learn_dsm
 from perm_pateda.learning.mallows import (
     LearnMallowsKendall,
     LearnMallowsCayley,
@@ -25,6 +27,8 @@ __all__ = [
     "LearnNHM",
     "learn_ehm",
     "learn_nhm",
+    "LearnDSM",
+    "learn_dsm",
     "LearnMallowsKendall",
     "LearnMallowsCayley",
     "LearnMallowsUlam",

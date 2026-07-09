@@ -1,7 +1,7 @@
 """
 Plug-and-play permutation EDA wrappers::
 
-    from perm_pateda import EHMEDA, MallowsKendallEDA, ...
+    from perm_pateda import EHMEDA, MallowsKendallEDA, DSMPSEDA, DSMASEDA, ...
 """
 
 from perm_pateda.algorithms.permutation import (
@@ -11,6 +11,13 @@ from perm_pateda.algorithms.permutation import (
     MallowsCayleyEDA,
     GMallowsKendallEDA,
     GMallowsCayleyEDA,
+    DSMPSEDA,
+    DSMASEDA,
+)
+from perm_pateda.algorithms.random_keys import (
+    RKGaussianUMDAEDA,
+    RKGaussianFullEDA,
+    RKCopulaVinesEDA,
 )
 
 __all__ = [
@@ -20,4 +27,9 @@ __all__ = [
     "MallowsCayleyEDA",
     "GMallowsKendallEDA",
     "GMallowsCayleyEDA",
+    "DSMPSEDA",
+    "DSMASEDA",
+    "RKGaussianUMDAEDA",
+    "RKGaussianFullEDA",
+    "RKCopulaVinesEDA",
 ]

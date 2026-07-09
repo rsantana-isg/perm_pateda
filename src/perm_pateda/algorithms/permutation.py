@@ -56,6 +56,9 @@ from perm_pateda.sampling.mixture_plackett_luce import SamplePlackettLuceMixture
 from perm_pateda.learning.hamming_kmm import LearnHammingKMM
 from perm_pateda.sampling.hamming_kmm import SampleHammingKMM
 
+from perm_pateda.learning.dsm import LearnDSM
+from perm_pateda.sampling.dsm import SampleDSMPS, SampleDSMAS
+
 def _dummy_cardinality(n_vars: int) -> np.ndarray:
     """Return a placeholder cardinality array for permutations."""
     return np.arange(n_vars)
@@ -536,3 +539,144 @@ class MallowsUlamEDA(_PermEDA):
         )
         self._learner = LearnMallowsUlam()
         self._sampler = SampleMallowsUlam(burn_in=burn_in, step_size=step_size)
+
+
+# ---------------------------------------------------------------------------
+# DSMPSEDA
+# ---------------------------------------------------------------------------
+
+class DSMPSEDA(_PermEDA):
+    """
+    Doubly Stochastic Matrix EDA – Probabilistic Sampling (DSM-PS).
+
+    Learns a Doubly Stochastic Matrix (DSM) from the selected population
+    using the smoothed convex-combination scheme of Santucci & Ceberio
+    (2023) and samples new permutations via Probabilistic Sampling (PS).
+
+    In PS, one permutation is built iteratively: a remaining row of the
+    DSM is chosen uniformly at random, a column is drawn from the
+    corresponding (renormalised) probability vector, and the row/column
+    pair is removed.  The time cost per sample is O(n²).
+
+    Parameters
+    ----------
+    n_vars : int
+        Permutation length (items are 0 .. n_vars-1).
+    fitness_func : callable
+        Function mapping a permutation (1-D int array) to a scalar
+        fitness (higher is better).
+    pop_size : int
+        Population size.
+    n_gen : int
+        Number of generations.
+    selection_ratio : float
+        Fraction of population selected for model learning.
+    elitism : bool
+        Whether to preserve the best solution across generations.
+    random_seed : int or None
+        Random seed for reproducibility.
+    alpha : float or None
+        DSM smoothing factor α ∈ (0, 1].  Defaults to 1/n_vars².
+
+    References
+    ----------
+    [1] V. Santucci, J. Ceberio: Doubly Stochastic Matrix Models for
+        Estimation of Distribution Algorithms. arXiv:2304.02458, 2023.
+    """
+
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        alpha: Optional[float] = None,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._alpha = alpha
+        self._learner = LearnDSM()
+        self._sampler = SampleDSMPS()
+
+    def _learn(self, gen: int, population: np.ndarray, fitness: np.ndarray):
+        return self._learner(
+            generation=gen,
+            n_vars=self.n_vars,
+            cardinality=self._card,
+            selected_pop=population,
+            selected_fitness=fitness,
+            alpha=self._alpha,
+        )
+
+
+# ---------------------------------------------------------------------------
+# DSMASEDA
+# ---------------------------------------------------------------------------
+
+class DSMASEDA(_PermEDA):
+    """
+    Doubly Stochastic Matrix EDA – Algebraic Sampling (DSM-AS).
+
+    Learns a Doubly Stochastic Matrix (DSM) from the selected population
+    using the smoothed convex-combination scheme of Santucci & Ceberio
+    (2023) and samples new permutations via Algebraic Sampling (AS).
+
+    In AS, a uniform random vector v is drawn, multiplied by D to obtain
+    D·v, and the resulting permutation is derived from the ranking
+    relationship between v and D·v (see Eq. 5–6 of [1]).  AS is fully
+    vectorised over the entire population (O(n²) matrix–vector products
+    via BLAS) and is typically faster than PS in practice.
+
+    Parameters
+    ----------
+    n_vars : int
+        Permutation length (items are 0 .. n_vars-1).
+    fitness_func : callable
+        Function mapping a permutation (1-D int array) to a scalar
+        fitness (higher is better).
+    pop_size : int
+        Population size.
+    n_gen : int
+        Number of generations.
+    selection_ratio : float
+        Fraction of population selected for model learning.
+    elitism : bool
+        Whether to preserve the best solution across generations.
+    random_seed : int or None
+        Random seed for reproducibility.
+    alpha : float or None
+        DSM smoothing factor α ∈ (0, 1].  Defaults to 1/n_vars².
+
+    References
+    ----------
+    [1] V. Santucci, J. Ceberio: Doubly Stochastic Matrix Models for
+        Estimation of Distribution Algorithms. arXiv:2304.02458, 2023.
+    """
+
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        alpha: Optional[float] = None,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._alpha = alpha
+        self._learner = LearnDSM()
+        self._sampler = SampleDSMAS()
+
+    def _learn(self, gen: int, population: np.ndarray, fitness: np.ndarray):
+        return self._learner(
+            generation=gen,
+            n_vars=self.n_vars,
+            cardinality=self._card,
+            selected_pop=population,
+            selected_fitness=fitness,
+            alpha=self._alpha,
+        )
