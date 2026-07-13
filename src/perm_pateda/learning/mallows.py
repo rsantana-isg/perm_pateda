@@ -105,6 +105,8 @@ class LearnMallowsKendall:
             "psis": psis,
             "model_type": "mallows_kendall",
         }
+ 
+
 
     def _calculate_theta(
         self,
@@ -115,15 +117,17 @@ class LearnMallowsKendall:
         max_iter: int,
     ) -> float:
         """Calculate theta parameter using maximum likelihood estimation."""
-        # Get inverse of consensus
         inv_consensus = np.argsort(consensus)
 
-        # Compose each permutation with inverse of consensus
-        n_pop, n_vars = population.shape
+        ##utilizo los mejores individuos maximo 30 para caluclar theta y asi ahorrar tiempo
+        max_samples_for_theta = min(30, population.shape[0])
+        sample_pop = population[:max_samples_for_theta]
+        n_vars = population.shape[1]
+        
         v_vectors = []
 
-        for i in range(n_pop):
-            composition = population[i][inv_consensus]
+        for i in range(max_samples_for_theta):
+            composition = sample_pop[i][inv_consensus]
             v_vec = self._v_vector(composition)
             v_vectors.append(v_vec)
 
@@ -457,81 +461,49 @@ class LearnGeneralizedMallowsKendall:
         n_vars: int,
     ) -> np.ndarray:
         """Calculate theta parameters (one for each position) using MLE."""
-        # Get inverse of consensus
         inv_consensus = np.argsort(consensus)
 
-        # Compose each permutation with inverse of consensus
-        n_pop = population.shape[0]
+        ##lo mismo que en el mallows kendall
+        max_samples_for_theta = min(30, population.shape[0])
+        sample_pop = population[:max_samples_for_theta]
+        
         v_vectors = []
-
-        for i in range(n_pop):
-            composition = population[i][inv_consensus]
+        for i in range(max_samples_for_theta):
+            composition = sample_pop[i][inv_consensus]
             v_vec = self._v_vector(composition)
             v_vectors.append(v_vec)
 
         v_vectors_array = np.array(v_vectors)
         v_mean = np.mean(v_vectors_array, axis=0)
 
-        # Calculate theta_j for each position j independently
         thetas = np.zeros(n_vars - 1)
 
         for j in range(n_vars - 1):
-            # For position j, we need to find theta_j that matches E[v_j]
             def theta_function(theta):
-                """Function f(theta) whose root gives the MLE"""
-                n_j = n_vars - j  # Number of items from position j onward
+                n_j = n_vars - j
                 if abs(theta) < 1e-10:
                     return n_j / 2.0 - v_mean[j]
-
-                # E[V_j] = (n_j * exp(-theta) - exp(-(n_j+1)*theta)) / (1 - exp(-(n_j+1)*theta))
+                
                 exp_theta = np.exp(-theta)
                 exp_nj1_theta = np.exp(-(n_j + 1) * theta)
-
                 if abs(1 - exp_nj1_theta) < 1e-10:
                     expected_vj = n_j / 2.0
                 else:
-                    numerator = n_j * exp_theta - exp_nj1_theta
-                    denominator = 1 - exp_nj1_theta
-                    expected_vj = numerator / denominator - 1.0
-
+                    expected_vj = (n_j * exp_theta - exp_nj1_theta) / (1 - exp_nj1_theta) - 1.0
                 return expected_vj - v_mean[j]
 
-            def theta_derivative(theta):
-                """Derivative of theta function"""
-                n_j = n_vars - j
-                if abs(theta) < 1e-10:
-                    return -(n_j * (n_j + 1)) / 12.0
-
-                exp_theta = np.exp(-theta)
-                exp_nj1_theta = np.exp(-(n_j + 1) * theta)
-
-                if abs(1 - exp_nj1_theta) < 1e-10:
-                    return -(n_j * (n_j + 1)) / 12.0
-
-                # Numerical derivative
-                delta = 1e-8
-                return (theta_function(theta + delta) - theta_function(theta)) / delta
-
-            # Use Newton-Raphson for this position
+            
             try:
-                theta_j = newton(
-                    theta_function,
-                    initial_theta,
-                    fprime=theta_derivative,
-                    maxiter=max_iter,
-                    tol=1e-6,
-                )
-                theta_j = np.clip(theta_j, 0.001, upper_theta)
-            except:
-                # Fallback to bounded optimization
                 theta_j = fminbound(
                     lambda t: abs(theta_function(t)),
                     0.001,
                     upper_theta,
                     xtol=1e-6,
-                    maxfun=max_iter,
+                    maxfun=max_iter
                 )
-
+            except:
+                theta_j = initial_theta
+            
             thetas[j] = theta_j
 
         return thetas
