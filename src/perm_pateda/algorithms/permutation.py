@@ -59,6 +59,19 @@ from perm_pateda.sampling.hamming_kmm import SampleHammingKMM
 from perm_pateda.learning.dsm import LearnDSM
 from perm_pateda.sampling.dsm import SampleDSMPS, SampleDSMAS
 
+from perm_pateda.learning.lehmer import LearnLehmerUMDA, LearnLehmerTree
+from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree
+
+from perm_pateda.learning.fisher_yates import LearnFisherYatesUMDA, LearnFisherYatesTree
+from perm_pateda.sampling.fisher_yates import SampleFisherYatesUMDA, SampleFisherYatesTree
+
+from perm_pateda.learning.vinsertion import LearnInsertionVectorUMDA, LearnInsertionVectorChain
+from perm_pateda.sampling.vinsertion import SampleInsertionVectorUMDA, SampleInsertionVectorChain
+
+
+
+
+
 def _dummy_cardinality(n_vars: int) -> np.ndarray:
     """Return a placeholder cardinality array for permutations."""
     return np.arange(n_vars)
@@ -680,3 +693,131 @@ class DSMASEDA(_PermEDA):
             selected_fitness=fitness,
             alpha=self._alpha,
         )
+    
+class LehmerUmdaEDA(_PermEDA):
+    """
+    EDA Univariado basado en la representación del Código de Lehmer.
+    Aprende un modelo UMDA independiente.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnLehmerUMDA(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleLehmerUMDA()
+
+class LehmerTreeEDA(_PermEDA):
+    """
+    Tree-EDA (Chow-Liu) basado en la representación del Código de Lehmer.
+    Aprende dependencias en forma de árbol.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+        root: int = 0,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnLehmerTree(laplace_smoothing=laplace_smoothing, root=root)
+        self._sampler = SampleLehmerTree()
+
+
+# ---------------------------------------------------------------------------
+# Fisher-Yates EDAs
+# ---------------------------------------------------------------------------
+
+class FisherYatesUmdaEDA(_PermEDA):
+    """
+    EDA Univariado basado en la representación de Fisher-Yates.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnFisherYatesUMDA(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleFisherYatesUMDA()
+
+class FisherYatesTreeEDA(_PermEDA):
+    """
+    Tree-EDA (Chow-Liu) basado en la representación de Fisher-Yates.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+        root: int = 0,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnFisherYatesTree(laplace_smoothing=laplace_smoothing, root=root)
+        self._sampler = SampleFisherYatesTree()
+
+
+# ---------------------------------------------------------------------------
+# Insertion Vector EDAs
+# ---------------------------------------------------------------------------
+
+class InsertionVectorUmdaEDA(_PermEDA):
+    """
+    EDA Univariado basado en la representación del Vector de Inserción.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnInsertionVectorUMDA(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleInsertionVectorUMDA()
+
+class InsertionVectorMarkovEDA(_PermEDA):
+    """
+    EDA basado en Cadenas de Markov sobre el Vector de Inserción.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnInsertionVectorChain(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleInsertionVectorChain()

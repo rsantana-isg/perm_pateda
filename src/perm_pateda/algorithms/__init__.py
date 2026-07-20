@@ -13,6 +13,12 @@ from perm_pateda.algorithms.permutation import (
     GMallowsCayleyEDA,
     DSMPSEDA,
     DSMASEDA,
+    LehmerUmdaEDA,
+    LehmerTreeEDA,
+    FisherYatesUmdaEDA,
+    FisherYatesTreeEDA,
+    InsertionVectorUmdaEDA,
+    InsertionVectorMarkovEDA,
 )
 from perm_pateda.algorithms.random_keys import (
     RKGaussianUMDAEDA,
@@ -32,4 +38,10 @@ __all__ = [
     "RKGaussianUMDAEDA",
     "RKGaussianFullEDA",
     "RKCopulaVinesEDA",
+    "LehmerUmdaEDA",
+    "LehmerTreeEDA",
+    "FisherYatesUmdaEDA",
+    "FisherYatesTreeEDA",
+    "InsertionVectorUmdaEDA",
+    "InsertionVectorMarkovEDA",
 ]
