@@ -26,6 +26,12 @@ from perm_pateda.sampling.mallows import (
 from perm_pateda.sampling.plackett_luce import SamplePlackettLuce
 from perm_pateda.sampling.mixture_plackett_luce import SamplePlackettLuceMixture
 from perm_pateda.sampling.hamming_kmm import SampleHammingKMM 
+
+from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree
+from perm_pateda.sampling.fisher_yates import SampleFisherYatesUMDA, SampleFisherYatesTree
+from perm_pateda.sampling.vinsertion import  SampleInsertionVectorUMDA, SampleInsertionVectorChain
+
+
 __all__ = [
     "SampleEHM",
     "SampleNHM",
@@ -46,4 +52,11 @@ __all__ = [
     "SamplePlackettLuce"
     "SamplePlackettLuceMixture",
     "SampleHammingKMM",
+    "SampleLehmerUMDA",
+    "SampleLehmerTree",
+    "SampleFisherYatesUMDA",
+    "SampleFisherYatesTree",
+    "SampleInsertionVectorUMDA",
+    "SampleInsertionVectorChain",
+
 ]

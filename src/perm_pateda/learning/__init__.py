@@ -22,6 +22,10 @@ from perm_pateda.learning.plackett_luce import LearnPlackettLuce
 from perm_pateda.learning.mixture_plackett_luce import LearnPlackettLuceMixture
 from perm_pateda.learning.hamming_kmm import LearnHammingKMM
 
+from perm_pateda.learning.lehmer import LearnLehmerUMDA, LearnLehmerTree
+from perm_pateda.learning.fisher_yates import LearnFisherYatesUMDA, LearnFisherYatesTree
+from perm_pateda.learning.vinsertion import LearnInsertionVectorUMDA, LearnInsertionVectorChain
+
 __all__ = [
     "LearnEHM",
     "LearnNHM",
@@ -40,4 +44,10 @@ __all__ = [
     "LearnPlackettLuce"
     "LearnPlackettLuceMixture",
     "LearnHammingKMM",
+    "LearnLehmerUMDA",
+    "LearnLehmerTree",
+    "LearnFisherYatesUMDA",
+    "LearnFisherYatesTree",
+    "LearnInsertionVectorUMDA",
+    "LearnInsertionVectorChain",
 ]
