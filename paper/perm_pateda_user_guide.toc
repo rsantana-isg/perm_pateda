@@ -1,0 +1,65 @@
+\contentsline {section}{\numberline {1}Introduction}{4}{section.1}%
+\contentsline {section}{\numberline {2}Installation and Package Structure}{5}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Installation}{5}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Package Structure}{5}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Running the Examples}{6}{subsection.2.3}%
+\contentsline {section}{\numberline {3}Defining and Executing a Permutation EDA}{7}{section.3}%
+\contentsline {subsection}{\numberline {3.1}General Description}{7}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}The Permutation EDA Wrappers}{7}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Input Parameters}{7}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Output: \texttt {Statistics} and \texttt {Cache}}{8}{subsubsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.3}Assembling a Permutation EDA from Components}{8}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Example: Mallows EDA on the Linear Ordering Problem}{9}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Fitness Convention}{9}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}Indexing Convention}{9}{subsection.3.6}%
+\contentsline {section}{\numberline {4}Plug-and-Play Algorithm Classes}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Quick Comparison Example}{10}{subsection.4.1}%
+\contentsline {section}{\numberline {5}Probability Models over Permutations}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Permutation Representation and Notation}{11}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}Distances on Permutations}{11}{subsection.5.2}%
+\contentsline {paragraph}{Kendall's-$\tau $ distance.}{11}{section*.2}%
+\contentsline {paragraph}{Cayley distance.}{11}{section*.3}%
+\contentsline {paragraph}{Ulam distance.}{12}{section*.4}%
+\contentsline {paragraph}{Hamming distance.}{12}{section*.5}%
+\contentsline {paragraph}{Choice of distance.}{12}{section*.6}%
+\contentsline {subsection}{\numberline {5.3}The Mallows Model}{12}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}The Generalized Mallows Model}{12}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Learning the Mallows and Generalized Mallows Models}{13}{subsection.5.5}%
+\contentsline {paragraph}{Stage 1: central permutation.}{13}{section*.7}%
+\contentsline {paragraph}{Stage 2: spread parameters.}{14}{section*.8}%
+\contentsline {subsection}{\numberline {5.6}Sampling the Mallows and Generalized Mallows Models}{14}{subsection.5.6}%
+\contentsline {subsection}{\numberline {5.7}Kernels of Mallows Models under the Hamming Distance}{15}{subsection.5.7}%
+\contentsline {subsection}{\numberline {5.8}Histogram Models: EHM and NHM}{15}{subsection.5.8}%
+\contentsline {paragraph}{Node histogram model (NHM).}{15}{section*.9}%
+\contentsline {paragraph}{Edge histogram model (EHM).}{16}{section*.10}%
+\contentsline {subsection}{\numberline {5.9}The Plackett--Luce Model}{16}{subsection.5.9}%
+\contentsline {subsection}{\numberline {5.10}Mixtures of Plackett--Luce Models}{16}{subsection.5.10}%
+\contentsline {subsection}{\numberline {5.11}Doubly Stochastic Matrix Models}{17}{subsection.5.11}%
+\contentsline {subsection}{\numberline {5.12}Models over Bijective Codings of $\mathcal {S}_n$}{17}{subsection.5.12}%
+\contentsline {subsection}{\numberline {5.13}Random-Key EDAs}{18}{subsection.5.13}%
+\contentsline {subsection}{\numberline {5.14}Fourier-Based Models (experimental)}{19}{subsection.5.14}%
+\contentsline {subsection}{\numberline {5.15}Summary of the Model Catalogue}{19}{subsection.5.15}%
+\contentsline {section}{\numberline {6}EDA Components}{19}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Seeding Methods}{20}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Selection Methods}{20}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Replacement Methods}{20}{subsection.6.3}%
+\contentsline {subsection}{\numberline {6.4}Stopping Conditions}{20}{subsection.6.4}%
+\contentsline {subsection}{\numberline {6.5}Local Optimization}{21}{subsection.6.5}%
+\contentsline {subsection}{\numberline {6.6}Repairing Methods}{21}{subsection.6.6}%
+\contentsline {subsection}{\numberline {6.7}Mutation and Crossover}{21}{subsection.6.7}%
+\contentsline {section}{\numberline {7}Test Functions and Benchmark Problems}{21}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Classical Permutation Problems}{21}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Graph Problems under the Permutation Picture}{22}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Benchmark Instance Readers}{22}{subsection.7.3}%
+\contentsline {section}{\numberline {8}Multi-Objective Optimization}{23}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Multi-Objective Problem Definition}{23}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Pareto Dominance and Archive}{23}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Scalarization}{23}{subsection.8.3}%
+\contentsline {subsection}{\numberline {8.4}The MEDA/D Family}{24}{subsection.8.4}%
+\contentsline {subsection}{\numberline {8.5}Relation to the \texttt {pateda} Multi-Objective Module}{25}{subsection.8.5}%
+\contentsline {section}{\numberline {9}Model Inspection and Statistical Analysis}{25}{section.9}%
+\contentsline {subsection}{\numberline {9.1}Inspecting the Learned Models}{25}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Statistical Comparison Utilities}{25}{subsection.9.2}%
+\contentsline {section}{\numberline {10}Injecting A-Priori Knowledge}{26}{section.10}%
+\contentsline {section}{\numberline {11}Relation to \texttt {perm\_mateda} and Coverage}{26}{section.11}%
+\contentsline {section}{\numberline {12}Conclusions}{27}{section.12}%

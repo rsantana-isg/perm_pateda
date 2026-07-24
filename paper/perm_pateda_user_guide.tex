@@ -1,0 +1,1789 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{geometry}
+\usepackage{natbib}
+
+\geometry{margin=2.5cm}
+\graphicspath{{figures/}}
+
+%% Python listing style (identical to the pateda user guide)
+\lstset{
+  language=Python,
+  basicstyle=\small\ttfamily,
+  keywordstyle=\color{blue}\bfseries,
+  commentstyle=\color{gray}\itshape,
+  stringstyle=\color{red!60!black},
+  showstringspaces=false,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=5pt,
+  xleftmargin=15pt,
+}
+
+\newtheorem{definition}{Definition}
+\newtheorem{example}{Example}
+
+\title{%
+  \textbf{perm\_pateda: Solving permutation-based optimization problems with
+  Estimation of Distribution Algorithms implemented in Python}\\[0.5em]
+}
+\author{
+  Julen Benagues \and Ekhine Irurozki \and Leticia Hernando \and Josu Ceberio \and Roberto Santana\\
+  Department of Computer Science and Artificial Intelligence\\
+  University of the Basque Country (UPV/EHU)\\
+  \texttt{leticia.hernando,josu.ceberio,roberto.santana\{@ehu.eus\}}
+}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This document describes \texttt{perm\_pateda}, a Python library of estimation of
+distribution algorithms (EDAs) for optimization problems whose solutions are
+\emph{permutations}. \texttt{perm\_pateda} is a specialized extension of
+\texttt{pateda}\footnote{\url{https://github.com/rsantana-isg/pateda}}: it contributes everything that is specific to the
+permutation space --- distances, central-permutation (consensus) estimators,
+permutation probability models, their learning and sampling methods, permutation
+seeding, benchmark problems and instance readers --- while reusing
+\texttt{pateda} for everything common to all EDAs (the core EDA executor,
+component interfaces, selection, replacement, statistics, stopping conditions and
+visualization).  The library covers the five distance-based EDAs of the
+\texttt{perm\_mateda} Matlab toolbox (Mallows and
+generalized Mallows models under the Kendall's-$\tau$, Cayley and Ulam
+distances) and extends them with a substantially wider catalogue of permutation
+models: kernels of Mallows models under the Hamming distance, edge and node
+histogram models, the Plackett--Luce model and mixtures of Plackett--Luce models,
+doubly stochastic matrix models, univariate/tree/Markov-chain models over
+bijective codings of permutations (Lehmer codes, Fisher--Yates draws, insertion
+vectors), and random-key EDAs that search the unit hypercube with continuous
+models. On the problem side, \texttt{perm\_pateda} implements the four classical
+permutation problems (TSP, PFSP, LOP, QAP) together with readers for the standard
+benchmark libraries (TSPLIB, Taillard, LOLIB, QAPLIB), and three graph problems
+reformulated under the ``permutation picture'' (maximum independent set, maximum
+cut, minimum vertex cover).  A decomposition-based multi-objective framework
+(MEDA/D) instantiated with nine different permutation models is also provided.
+Whenever a functionality is inherited unchanged from \texttt{pateda}, this guide
+points to the corresponding section of the \texttt{pateda} user guide instead of
+repeating its description.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ============================================================
+\section{Introduction}
+\label{sec:intro}
+%% ============================================================
+
+Estimation of distribution algorithms (EDAs)
+\citep{Larranhaga_and_Lozano:2002,Lozano_et_al:2005,Muhlenbein_and_Paas:1996,Pelikan_et_al:2006}
+replace the variation operators of genetic algorithms by the explicit estimation
+and sampling of a probabilistic model.  At each generation a model is learned
+from a set of selected solutions, and new solutions are obtained by sampling that
+model.  The general description of the EDA paradigm, of the probabilistic
+graphical models used in the discrete and continuous cases, and of the modular
+architecture on which this library is built, is given in the \texttt{pateda}
+user guide and is not repeated here.
+
+Many important combinatorial optimization problems, however, are naturally
+defined over the \emph{symmetric group} $\mathcal{S}_n$: the travelling salesman
+problem (TSP), the permutation flowshop scheduling problem (PFSP), the linear
+ordering problem (LOP), and the quadratic assignment problem (QAP), among many
+others.  A solution to such a problem is a permutation $\sigma$ of $n$ items,
+i.e.\ a bijection $\sigma: \{1,\ldots,n\} \rightarrow \{1,\ldots,n\}$.  The
+number of solutions is $n!$, and, crucially, the set of permutations is
+\emph{not} a Cartesian product of independent variable domains.  A model that
+treats the $n$ positions of a permutation as $n$ independent integer variables
+--- the natural choice for a discrete EDA --- assigns positive probability to
+vectors that are not permutations at all, so that sampling produces infeasible
+individuals that must be repaired, distorting the distribution the model was
+supposed to represent \citep{Ceberio_et_al:2012}.
+
+\texttt{perm\_pateda} therefore replaces the model family, not the algorithm.
+The EDA loop, the selection and replacement operators, the statistics and the
+stopping criteria are those of \texttt{pateda}; what changes is (i) how a
+population of permutations is represented, (ii) which probability distributions
+over $\mathcal{S}_n$ are estimated from the selected set, and (iii) how new
+permutations are drawn from them --- always guaranteeing feasibility by
+construction.  Three complementary strategies are implemented:
+
+\begin{itemize}
+  \item \textbf{Distributions defined directly on $\mathcal{S}_n$.}
+    Distance-based exponential models (Mallows, generalized Mallows, kernels of
+    Mallows models), multistage models (Plackett--Luce and its mixtures),
+    first- and second-order statistics of the population (node and edge histogram
+    models), and doubly stochastic matrix models.  Sampling from these models
+    always returns a valid permutation.
+  \item \textbf{Bijective codings of $\mathcal{S}_n$.}  Lehmer codes,
+    Fisher--Yates draw sequences and insertion vectors map $\mathcal{S}_n$
+    one-to-one onto a product of bounded integer domains
+    $\{0\} \times \{0,1\} \times \cdots \times \{0,\ldots,n-1\}$.  In that space
+    \emph{every} vector decodes to a valid permutation, so the whole battery of
+    discrete EDA models of \texttt{pateda} (univariate, tree-structured,
+    Markov chains) becomes directly applicable.
+  \item \textbf{Continuous relaxations.}  Random keys \citep{Bean:1994} encode a
+    permutation as a real vector in $[0,1]^n$ whose sorting order defines the
+    permutation.  Any continuous EDA of \texttt{pateda} (Gaussian univariate,
+    full multivariate Gaussian, vine copulas) can then be used to search the
+    permutation space.
+\end{itemize}
+
+The main design goals of \texttt{perm\_pateda} follow those of \texttt{pateda}:
+
+\begin{itemize}
+  \item \emph{Plug-and-play convenience:} classes such as
+    \texttt{MallowsKendallEDA}, \texttt{EHMEDA}, \texttt{PlackettLuceEDA} or
+    \texttt{DSMASEDA} provide a one-liner interface to a complete permutation
+    EDA.
+  \item \emph{Flexible component assembly:} every learning and sampling method is
+    an independent object with the \texttt{pateda} component interface, so it can
+    be plugged into a generic \texttt{EDA} through \texttt{EDAComponents}.
+  \item \emph{Extensibility:} adding a new permutation model requires only a
+    learner (selected population $\rightarrow$ model dictionary) and a sampler
+    (model dictionary $\rightarrow$ new permutations).
+  \item \emph{Single- and multi-objective support:} a decomposition-based
+    multi-objective framework (MEDA/D) is provided and can be instantiated with
+    any of nine permutation models.
+  \item \emph{Reproducibility:} instance readers for the standard benchmark
+    libraries and statistical comparison utilities (Friedman, pairwise Wilcoxon,
+    critical-difference diagrams) are included.
+\end{itemize}
+
+The remainder of this guide is organized as follows.
+Section~\ref{sec:install} describes installation and the package structure.
+Section~\ref{sec:eda} explains how a permutation EDA is defined and executed.
+Section~\ref{sec:algorithms} surveys the plug-and-play algorithm classes.
+Section~\ref{sec:models} details the probability models over permutations, their
+learning and their sampling.
+Section~\ref{sec:components} documents the EDA components, indicating which are
+inherited from \texttt{pateda}.
+Section~\ref{sec:functions} lists the permutation problems and instance readers.
+Section~\ref{sec:multiobjective} covers the multi-objective framework.
+Section~\ref{sec:knowledge} describes model inspection and the statistical
+comparison utilities.
+Section~\ref{sec:apriori} discusses the injection of a-priori knowledge.
+Section~\ref{sec:coverage} relates the library to the \texttt{perm\_mateda}
+toolbox.
+
+%% ============================================================
+\section{Installation and Package Structure}
+\label{sec:install}
+%% ============================================================
+
+\subsection{Installation}
+
+\texttt{perm\_pateda} depends on \texttt{pateda}.  Since \texttt{pateda} is an
+in-development package, install it first from the local checkout and then install
+\texttt{perm\_pateda}:
+
+\begin{lstlisting}[language=bash]
+pip3 install -e packages/pateda
+pip3 install -e packages/perm_pateda
+\end{lstlisting}
+
+\noindent For the development tooling (\texttt{pytest}, \texttt{ruff},
+\texttt{black}, \texttt{mypy}):
+
+\begin{lstlisting}[language=bash]
+pip3 install -e "packages/perm_pateda[dev]"
+\end{lstlisting}
+
+Required dependencies are \texttt{numpy}, \texttt{scipy} and \texttt{pateda}.
+The mixture of Plackett--Luce models additionally uses
+\texttt{scikit-learn} ($k$-means in the spectral initialization), and the
+statistical utilities use \texttt{pandas} and \texttt{matplotlib}.  Python
+$\geq 3.9$ is required.
+
+\subsection{Package Structure}
+
+The top-level \texttt{perm\_pateda} namespace exposes the algorithm classes, the
+distances, the consensus estimators, the random-key conversion helpers, the
+benchmark readers and the statistical utilities:
+
+\begin{lstlisting}
+from perm_pateda import (
+    # distance-based EDAs
+    MallowsKendallEDA, MallowsCayleyEDA, MallowsUlamEDA,
+    GMallowsKendallEDA, GMallowsCayleyEDA, HammingKMMEDA,
+    # histogram, multistage and matrix models
+    EHMEDA, NHMEDA, PlackettLuceEDA, PlackettLuceMixtureEDA,
+    DSMPSEDA, DSMASEDA,
+    # random-key EDAs
+    RKGaussianUMDAEDA, RKGaussianFullEDA, RKCopulaVinesEDA,
+    # distances and consensus
+    kendall_distance, cayley_distance, ulam_distance, hamming_distance,
+    find_consensus_borda, find_consensus_median,
+    # instance readers
+    parse_lolib, parse_taillard_pfsp, parse_qaplib, parse_tsplib,
+    # random-key utilities
+    permutation_to_random_keys, random_keys_to_permutation,
+    random_keys_to_ranks, rescale_random_keys,
+    # statistical comparison
+    summary_table, friedman_test, wilcoxon_pairwise,
+    critical_difference_plot,
+)
+\end{lstlisting}
+
+\noindent The EDAs built on bijective codings
+(\texttt{LehmerUmdaEDA}, \texttt{LehmerTreeEDA}, \texttt{FisherYatesUmdaEDA},
+\texttt{FisherYatesTreeEDA}, \texttt{InsertionVectorUmdaEDA},
+\texttt{InsertionVectorMarkovEDA}) are imported from
+\texttt{perm\_pateda.algorithms}.  The internal module tree is:
+
+\begin{center}
+\begin{tabular}{lp{9.2cm}}
+\toprule
+\textbf{Module} & \textbf{Contents} \\
+\midrule
+\texttt{distances.py} & Kendall's-$\tau$, Cayley, Ulam and Hamming distances;
+  inversion vector $\mathbf{V}$, cycle-based decomposition vector $\mathbf{X}$,
+  derangement numbers \\
+\texttt{consensus.py} & Central-permutation estimators (Borda, set median,
+  best) and their dispatcher; permutation composition and inversion \\
+\texttt{random\_keys.py} & Conversion between permutations, random keys and
+  ranks; rank-based rescaling \\
+\texttt{representations/} & Bijective codings: \texttt{LehmerRepresentation},
+  \texttt{FisherYatesRepresentation}, \texttt{InsertionVectorRepresentation} \\
+\texttt{learning/} & All permutation model learners \\
+\texttt{sampling/} & All permutation model samplers \\
+\texttt{seeding/} & \texttt{PermutationInit} (uniform random permutations) \\
+\texttt{algorithms/} & Plug-and-play wrappers (\texttt{permutation.py},
+  \texttt{random\_keys.py}) and \texttt{pateda} component adapters
+  (\texttt{base.py}) \\
+\texttt{functions/} & Permutation problems: TSP, PFSP, LOP, QAP, MIS, MaxCut,
+  MVC, with random-instance generators \\
+\texttt{multiobjective/} & Scalarization, Pareto dominance and archive, the
+  MEDA/D family of decomposition-based multi-objective permutation EDAs \\
+\texttt{utils/} & Benchmark instance parsers and statistical comparison tools \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Note that there are no \texttt{selection/}, \texttt{replacement/},
+\texttt{stop\_conditions/}, \texttt{statistics/} or
+\texttt{knowledge\_extraction/} modules: those components are representation
+agnostic and are imported directly from \texttt{pateda}.
+
+\subsection{Running the Examples}
+
+The \texttt{examples/} directory contains runnable scripts that show the two ways
+of assembling a permutation EDA --- through the generic \texttt{pateda} executor
+and through the plug-and-play wrappers:
+
+\begin{lstlisting}[language=bash]
+python3 examples/ehm_tsp_example.py
+python3 examples/mallows_tsp_example.py
+\end{lstlisting}
+
+\noindent The test suite (\texttt{tests/}) exercises the Mallows model under the
+Cayley distance and the generalized Mallows models, checking the decomposition
+vectors, the learn$\rightarrow$sample round trip and convergence on small
+instances:
+
+\begin{lstlisting}[language=bash]
+pytest tests/
+\end{lstlisting}
+
+%% ============================================================
+\section{Defining and Executing a Permutation EDA}
+\label{sec:eda}
+%% ============================================================
+
+\subsection{General Description}
+
+A permutation EDA follows the generic EDA schema of \texttt{pateda}
+(Algorithm~\ref{alg:PermEDA}): an initial population of permutations is generated
+and evaluated; at each generation a subset of the population is selected, a
+probability model over $\mathcal{S}_n$ is estimated from it, and new permutations
+are sampled from the model to form the next population.  The only structural
+differences with respect to the discrete EDA of \texttt{pateda} are that the
+initialization returns permutations, and that the learning/sampling pair operates
+on $\mathcal{S}_n$.
+
+\begin{algorithm}
+\caption{Estimation of distribution algorithm for permutation problems}
+\label{alg:PermEDA}
+\begin{algorithmic}[1]
+\State $t \leftarrow 0$
+\State Generate $D_0$: $N$ permutations drawn uniformly at random from
+  $\mathcal{S}_n$
+\State Evaluate $D_0$
+\Repeat
+  \State $D_t^{Se} \leftarrow$ Select $M \leq N$ permutations from $D_t$
+  \State $p_t(\sigma) \leftarrow$ Estimate a probability distribution over
+    $\mathcal{S}_n$ from $D_t^{Se}$
+  \State $D_{t+1} \leftarrow$ Sample $N$ permutations from $p_t(\sigma)$ and
+    evaluate them
+  \State $t \leftarrow t+1$
+\Until{stopping criterion is met}
+\end{algorithmic}
+\end{algorithm}
+
+Two execution paths are available.  The \emph{component path} builds a
+\texttt{pateda.core.eda.EDA} object out of an \texttt{EDAComponents} dataclass in
+which the learning and sampling slots are filled with \texttt{perm\_pateda}
+objects; this gives access to the whole \texttt{pateda} machinery (arbitrary
+selection and replacement operators, stopping conditions, statistics tracking,
+local optimization, caching).  The \emph{wrapper path} uses the plug-and-play
+classes of Section~\ref{sec:algorithms}, which implement a self-contained loop.
+
+\subsection{The Permutation EDA Wrappers}
+
+All plug-and-play classes derive from an internal base class \texttt{\_PermEDA}
+(\texttt{algorithms/permutation.py}) that implements the loop of
+Algorithm~\ref{alg:PermEDA} with truncation selection and optional elitism.  A
+self-contained loop is used --- instead of delegating to
+\texttt{pateda.core.eda.EDA} --- because several permutation learners and
+samplers expose only \texttt{\_\_call\_\_} (rather than \texttt{.learn()} /
+\texttt{.sample()}), and because the samplers need an explicit
+\texttt{sample\_size} argument.  The base class bridges both calling conventions
+transparently.
+
+\subsubsection{Input Parameters}
+
+All permutation algorithm classes share the following constructor parameters:
+
+\begin{center}
+\begin{tabular}{lp{9cm}}
+\toprule
+Parameter & Description \\
+\midrule
+\texttt{n\_vars} & Permutation length $n$; items are $0,\ldots,n-1$ \\
+\texttt{fitness\_func} & Callable mapping a 1-D integer array (a permutation) to
+  a scalar; higher is better \\
+\texttt{pop\_size} & Population size $N$ (default: 100) \\
+\texttt{n\_gen} & Number of generations (default: 50) \\
+\texttt{selection\_ratio} & Truncation fraction $M/N$ (default: 0.5) \\
+\texttt{elitism} & Preserve the best permutation found so far (default: True) \\
+\texttt{random\_seed} & Seed of the \texttt{numpy} random generator
+  (default: None) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent Model-specific parameters are added by individual classes and are
+listed in Table~\ref{tab:perm_algs}.
+
+\subsubsection{Output: \texttt{Statistics} and \texttt{Cache}}
+
+\texttt{run()} returns the pair \texttt{(stats, cache)} of \texttt{pateda}
+objects.  \texttt{Statistics} accumulates, per generation, the best, mean and
+worst fitness, the population diversity measures, and the best individual found
+overall (\texttt{stats.best\_fitness\_overall}, \texttt{stats.best\_individual}).
+Their fields and the \texttt{Cache} contents are documented in the
+\texttt{pateda} user guide; the permutation wrappers populate them with exactly
+the same semantics.
+
+\subsection{Assembling a Permutation EDA from Components}
+
+Because the learners and samplers implement the \texttt{pateda}
+\texttt{LearningMethod} / \texttt{SamplingMethod} interfaces (directly, or through
+the adapters in \texttt{algorithms/base.py}), a permutation EDA can be assembled
+component by component exactly like any other \texttt{pateda} algorithm:
+
+\begin{lstlisting}
+import numpy as np
+from pateda.core.eda import EDA
+from pateda.core.components import EDAComponents
+from pateda.selection import TruncationSelection
+from pateda.replacement import ElitistReplacement
+from pateda.stop_conditions import MaxGenerations
+
+from perm_pateda.seeding import PermutationInit
+from perm_pateda.learning.histogram import LearnEHM
+from perm_pateda.sampling.histogram import SampleEHM
+from perm_pateda.functions import create_random_tsp
+
+n_cities, pop_size, n_gen = 15, 80, 40
+tsp = create_random_tsp(n_cities, seed=42)
+
+components = EDAComponents(
+    seeding=PermutationInit(),
+    selection=TruncationSelection(ratio=0.5),
+    learning=LearnEHM(),
+    sampling=SampleEHM(),
+    replacement=ElitistReplacement(n_elite=int(pop_size * 0.1)),
+    stop_condition=MaxGenerations(n_gen),
+)
+components.learning_params = {"symmetric": True, "beta_ratio": 0.01}
+components.sampling_params = {"sample_size": pop_size}
+
+eda = EDA(n_vars=n_cities,
+          cardinality=np.full(n_cities, n_cities, dtype=int),
+          fitness_func=tsp, pop_size=pop_size,
+          components=components, random_seed=42)
+stats, cache = eda.run()
+print("Best tour length:", -stats.best_fitness_overall)
+\end{lstlisting}
+
+Two remarks.  The \texttt{learning\_params} and \texttt{sampling\_params}
+dictionaries carry the model-specific arguments that the generic executor does
+not know about --- in particular \texttt{sample\_size}, which the permutation
+samplers require.  And the \texttt{cardinality} argument, which is essential for
+discrete EDAs, carries no information here: it is passed for interface
+compatibility only, and the plug-and-play wrappers fill it with the placeholder
+\texttt{np.arange(n\_vars)}.
+
+\subsection{Example: Mallows EDA on the Linear Ordering Problem}
+
+The equivalent program using a plug-and-play wrapper is a single object
+construction:
+
+\begin{lstlisting}
+import numpy as np
+from perm_pateda import MallowsKendallEDA
+from perm_pateda.functions import create_random_lop
+
+lop = create_random_lop(15, seed=0)
+
+alg = MallowsKendallEDA(
+    n_vars=15,
+    fitness_func=lop,          # LOP.__call__: permutation -> scalar
+    pop_size=100,
+    n_gen=50,
+    selection_ratio=0.3,
+    random_seed=0,
+)
+stats, _ = alg.run(verbose=True)
+print("Best fitness:    ", stats.best_fitness_overall)
+print("Best permutation:", stats.best_individual)
+\end{lstlisting}
+
+\subsection{Fitness Convention}
+
+As in \texttt{pateda}, \textbf{the fitness function is always maximized}.  The
+problem classes of Section~\ref{sec:functions} follow this convention
+internally: \texttt{TSP.\_\_call\_\_} returns the \emph{negated} tour length,
+\texttt{QAP.\_\_call\_\_} the negated assignment cost, \texttt{PFSP.\_\_call\_\_}
+the negated makespan or flowtime, and \texttt{MVC.\_\_call\_\_} the negated size
+of the vertex cover, while \texttt{LOP}, \texttt{MIS} and \texttt{MaxCut} return
+directly maximized quantities.  Each class additionally provides an
+\texttt{evaluate\_*} method returning the natural (positive, non-negated)
+objective value for reporting:
+
+\begin{lstlisting}
+tour_length  = tsp.evaluate_distance(perm)   # positive
+qap_cost     = qap.evaluate_cost(perm)       # positive
+makespan     = pfsp.evaluate_makespan(perm)  # positive
+lop_value    = lop.evaluate_objective(perm)
+\end{lstlisting}
+
+\subsection{Indexing Convention}
+
+Permutations are internally 0-indexed arrays containing each of
+$0,\ldots,n-1$ exactly once.  For compatibility with instance files and with the
+Matlab toolbox, the learners, samplers and problem classes detect 1-indexed
+input (by testing whether the minimum entry equals one) and convert it
+internally.  Users writing new components should produce 0-indexed
+permutations.
+
+%% ============================================================
+\section{Plug-and-Play Algorithm Classes}
+\label{sec:algorithms}
+%% ============================================================
+
+Table~\ref{tab:perm_algs} summarizes the permutation algorithm classes.  Every
+class exposes the constructor parameters of Section~\ref{sec:eda} plus the
+extra parameters listed in the last column, and a \texttt{run(verbose=False)}
+method returning \texttt{(stats, cache)}.
+
+\begin{center}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{longtable}{llp{5.0cm}p{3.0cm}}
+\caption{Plug-and-play permutation algorithm classes in \texttt{perm\_pateda}.}
+\label{tab:perm_algs}\\
+\toprule
+\textbf{Class} & \textbf{Identifier} & \textbf{Model} & \textbf{Extra parameters} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Class} & \textbf{Identifier} & \textbf{Model} & \textbf{Extra parameters} \\
+\midrule
+\endhead
+\multicolumn{4}{l}{\emph{Distance-based exponential models}}\\
+\texttt{MallowsKendallEDA}   & MEDA$_K$   & Mallows model, Kendall's-$\tau$ distance \citep{Ceberio_et_al:2011} & --- \\
+\texttt{MallowsCayleyEDA}    & MEDA$_C$   & Mallows model, Cayley distance \citep{Irurozki_et_al:2016} & --- \\
+\texttt{MallowsUlamEDA}      & MEDA$_U$   & Mallows model, Ulam distance, MCMC sampling \citep{Irurozki_et_al:2014} & \texttt{burn\_in}, \texttt{step\_size} \\
+\texttt{GMallowsKendallEDA}  & GMEDA$_K$  & Generalized Mallows, Kendall's-$\tau$ \citep{Ceberio_et_al:2014} & --- \\
+\texttt{GMallowsCayleyEDA}   & GMEDA$_C$  & Generalized Mallows, Cayley \citep{Ceberio_et_al:2014b} & --- \\
+\texttt{HammingKMMEDA}       & KMM$_H$    & Kernels of Mallows models under the Hamming distance \citep{Arza_et_al:2020} & \texttt{expected\_dist\_start}, \texttt{expected\_dist\_end}, \texttt{gamma} \\
+\midrule
+\multicolumn{4}{l}{\emph{Histogram, multistage and matrix models}}\\
+\texttt{EHMEDA}              & EHM-EDA    & Edge histogram model \citep{Tsutsui:2002} & --- \\
+\texttt{NHMEDA}              & NHM-EDA    & Node histogram model \citep{Tsutsui_et_al:2006} & --- \\
+\texttt{PlackettLuceEDA}     & PL-EDA     & Plackett--Luce model estimated with the MM algorithm \citep{Ceberio_et_al:2013} & --- \\
+\texttt{PlackettLuceMixtureEDA} & MPL-EDA & Mixture of $K$ Plackett--Luce models, spectral EM \citep{Nguyen_and_Zhang:2023} & \texttt{n\_components} \\
+\texttt{DSMPSEDA}            & DSM-PS     & Doubly stochastic matrix, probabilistic sampling \citep{Santucci_and_Ceberio:2023} & \texttt{alpha} \\
+\texttt{DSMASEDA}            & DSM-AS     & Doubly stochastic matrix, algebraic sampling \citep{Santucci_and_Ceberio:2023} & \texttt{alpha} \\
+\midrule
+\multicolumn{4}{l}{\emph{Models over bijective codings}}\\
+\texttt{LehmerUmdaEDA}       & L-UMDA     & Univariate marginals over Lehmer codes \citep{RegnierCoudert_and_McCall:2014} & \texttt{laplace\_smoothing} \\
+\texttt{LehmerTreeEDA}       & L-Tree     & Chow--Liu tree over Lehmer codes \citep{Chow_and_Liu:1968} & \texttt{laplace\_smoothing}, \texttt{root} \\
+\texttt{FisherYatesUmdaEDA}  & FY-UMDA    & Univariate marginals over Fisher--Yates draws \citep{Durstenfeld:1964} & \texttt{laplace\_smoothing} \\
+\texttt{FisherYatesTreeEDA}  & FY-Tree    & Chow--Liu tree over Fisher--Yates draws & \texttt{laplace\_smoothing}, \texttt{root} \\
+\texttt{InsertionVectorUmdaEDA} & IV-UMDA & Univariate marginals over insertion vectors & \texttt{laplace\_smoothing} \\
+\texttt{InsertionVectorMarkovEDA} & IV-MC & First-order Markov chain over insertion vectors & \texttt{laplace\_smoothing} \\
+\midrule
+\multicolumn{4}{l}{\emph{Random-key (continuous relaxation) EDAs}}\\
+\texttt{RKGaussianUMDAEDA}   & RK-UMDA    & Univariate Gaussian on random keys \citep{Ayodele_et_al:2016} & \texttt{diminishing}, \texttt{cooling}, \texttt{initial\_sigma}, \texttt{min\_sigma} \\
+\texttt{RKGaussianFullEDA}   & RK-Full    & Full multivariate Gaussian on random keys & idem \\
+\texttt{RKCopulaVinesEDA}    & RK-Vine    & Vine-copula model on random keys & idem $+$ \texttt{truncation\_level} \\
+\bottomrule
+\end{longtable}
+\end{center}
+
+\subsection{Quick Comparison Example}
+
+\begin{lstlisting}
+import numpy as np
+from perm_pateda import (MallowsKendallEDA, GMallowsCayleyEDA,
+                        EHMEDA, PlackettLuceEDA, DSMASEDA)
+from perm_pateda.functions import create_random_qap
+
+n = 20
+qap = create_random_qap(n, seed=1)
+
+for AlgClass in [MallowsKendallEDA, GMallowsCayleyEDA,
+                 EHMEDA, PlackettLuceEDA, DSMASEDA]:
+    alg = AlgClass(n_vars=n, fitness_func=qap,
+                   pop_size=200, n_gen=100, random_seed=1)
+    stats, _ = alg.run()
+    print(f"{AlgClass.__name__:22s} cost = "
+          f"{-stats.best_fitness_overall:.0f}")
+\end{lstlisting}
+
+%% ============================================================
+\section{Probability Models over Permutations}
+\label{sec:models}
+%% ============================================================
+
+\subsection{Permutation Representation and Notation}
+
+Permutations are denoted by $\sigma$ or $\pi$; $\pi^{-1}$ is the inverse of
+$\pi$; the composition of $\sigma$ and $\pi$ is $\sigma\pi$, defined by
+$\sigma\pi(i) = \sigma(\pi(i))$; $e = 1\,2\,3\cdots n$ is the identity
+permutation.  A distance $d(\sigma,\pi)$ measures the disagreement between the
+two permutations and, for convenience, $d(\sigma,e)$ is written $d(\sigma)$.  All
+the distances considered here are \emph{right invariant},
+\begin{equation}
+d(\sigma, \pi) = d(\sigma\pi^{-1}, e) = d(\sigma\pi^{-1}) ,
+\end{equation}
+a property that is repeatedly exploited by the learning and sampling algorithms.
+
+A population of $N$ permutations of length $n$ is stored as a 2-D
+\texttt{numpy} array of shape $(N, n)$ and integer \texttt{dtype}, in the same
+way that \texttt{pateda} stores a discrete population.
+
+\subsection{Distances on Permutations}
+
+The module \texttt{distances.py} implements four distances together with the
+auxiliary decompositions required by the models.
+
+\paragraph{Kendall's-$\tau$ distance.}
+$d_\tau(\sigma,\pi)$ counts the number of pairwise disagreements between
+$\sigma$ and $\pi$:
+\begin{align*}
+d_\tau(\sigma, \pi)=|\{(i,j) : i<j,\,\, & (\sigma(i) < \sigma(j) \land \pi(i)>\pi(j) ) \\
+ \lor & (\pi(i) < \pi(j) \land \sigma(i)>\sigma(j) )  \, \}| .
+\end{align*}
+It is the best choice when permutations are interpreted as \emph{rankings} (as in
+recommender systems), and it is equivalent to the minimum number of adjacent
+swaps needed to convert $\sigma^{-1}$ into $\pi^{-1}$.  The Kendall's-$\tau$
+distance decomposes into the \emph{inversion vector}
+$\mathbf{V}(\sigma) = (V_1(\sigma),\ldots,V_{n-1}(\sigma))$,
+\begin{equation}
+ V_j(\sigma) = \sum_{i=j+1}^n \bm{1}_{[\sigma(i) < \sigma(j)]} ,
+ \label{eq:kendall_decomp}
+\end{equation}
+so that $V_j(\sigma)$ is the number of items with index larger than $j$ whose
+value is smaller than $\sigma(j)$, with $0 \leq V_j(\sigma) \leq n-j$.  For
+example, if $\sigma = 2\,1\,3\,6\,4\,5$, then $\mathbf{V}(\sigma) = (1\,0\,0\,2\,0)$
+and $d_\tau(\sigma) = \sum_{j=1}^{n-1} V_j(\sigma) = 3$.  The conversion between
+$\mathbf{V}(\sigma)$ and $\sigma$ takes $O(n^2)$.  In \texttt{perm\_pateda} the
+inversion vector is computed by \texttt{\_v\_vector} and the distance by
+\texttt{kendall\_distance}.
+
+\paragraph{Cayley distance.}
+$d_c(\sigma,\pi)$ counts the minimum number of swaps (not necessarily adjacent)
+needed to transform $\sigma$ into $\pi$.  It is intimately related to the cycles
+of $\sigma$ --- ordered sets $\{i_1,\ldots,i_s\}$ such that $\sigma(i_1)=i_2$,
+$\sigma(i_2)=i_3$, \ldots, $\sigma(i_s)=i_1$ --- and when the reference
+permutation is the identity, $d_c(\sigma)$ equals $n$ minus the number of cycles
+of $\sigma$.  Its decomposition vector
+$\mathbf{X}(\sigma)=(X_1(\sigma),\ldots,X_{n-1}(\sigma))$ is
+\begin{equation}
+X_j(\sigma) =
+ \begin{cases}
+   0 & \text{if $j$ is the largest item in its cycle in $\sigma$,} \\
+   1 & \text{otherwise,}
+  \end{cases}
+ \label{eq:cayley_decomp}
+\end{equation}
+computable in $O(n)$.  For $\sigma = 2\,1\,3\,6\,4\,5$, whose cycle notation is
+$(2\,1)(3)(4\,5\,6)$, one gets $\mathbf{X}(\sigma)=1\,0\,0\,1\,1$ and
+$d_c(\sigma)=3$.  The functions \texttt{\_x\_vector\_cycles} and
+\texttt{\_generate\_perm\_from\_x} implement the two directions of this
+conversion, the latter being the core of the Cayley sampler.
+
+\paragraph{Ulam distance.}
+$d_u(\sigma,\pi)$ is $n$ minus the length of the longest common subsequence of
+$\sigma$ and $\pi$; when the reference is the identity, $d_u(\sigma)$ is $n$
+minus the length of the longest increasing subsequence (LIS).  The classical
+illustration \citep{Diaconis:1988} is a shelf of books ordered as $\sigma$ that
+must be reordered as $\pi$ using the minimum number of \emph{delete-and-insert}
+movements; that minimum is exactly $d_u(\sigma,\pi)$.  For
+$\sigma=2\,1\,3\,6\,4\,5\,7$ the LIS has length $5$, hence $d_u(\sigma)=2$.  The
+implementation (\texttt{ulam\_distance}) computes the LIS in $O(n \log n)$ with
+the patience-sorting algorithm.  \emph{No distance decomposition vector is known
+for the Ulam distance}, which is why the generalized Mallows model cannot be
+extended to it \citep{Irurozki_et_al:2014}.
+
+\paragraph{Hamming distance.}
+$d_H(\sigma,\pi) = |\{i : \sigma(i) \neq \pi(i)\}|$ counts the positions at
+which the two permutations disagree.  It is the natural distance when the
+absolute position of each item is what matters, as in the QAP, and it underlies
+the kernels of Mallows models of Section~\ref{sec:kmm}.  The number of
+permutations at Hamming distance $k$ from a fixed permutation is
+$S(n,k) = \binom{n}{k} D_k$, where $D_k$ is the number of derangements of $k$
+elements, computed by \texttt{compute\_derangements} through the recurrence
+$D_k = (k-1)(D_{k-1}+D_{k-2})$.  Note that $d_H$ can never equal one.
+
+\paragraph{Choice of distance.}
+There is no distance that is best in general.  As reported by
+\citet{Ceberio_et_al:2015}, some distances behave well for some problems
+(meaning that they perform well for most instances of the problem) and other
+distances for other problems.  Although an exhaustive correspondence between
+distances and problems is not possible, as a general rule an EDA under a
+particular distance will perform well on a problem when that metric is adequate
+to measure the discrepancies between permutations in that domain.  The
+correspondence suggested by the experimental study of the \texttt{perm\_mateda}
+toolbox associates the Kendall's-$\tau$ distance with the PFSP, the Cayley
+distance with the QAP, and the Ulam distance with the LOP.
+
+\subsection{The Mallows Model}
+
+The Mallows model \citep{Mallows:1957} is a distance-based exponential
+probability model over permutation spaces.  Given a distance over permutations,
+it is defined by two parameters: the central permutation $\sigma_0$ and the
+spread parameter $\theta$.  The probability of every permutation $\sigma$ is
+\begin{equation}
+P(\sigma) = \psi(\theta)^{-1} \exp\big(-\theta\, d(\sigma, \sigma_0)\big) ,
+\label{eq:mallows}
+\end{equation}
+where $\psi(\theta)$ is the normalization constant.  When $\theta>0$, $\sigma_0$
+is the mode of the distribution, and the probability of the remaining $n!-1$
+permutations decreases exponentially with their distance to $\sigma_0$: the
+closer a permutation is to $\sigma_0$, the higher its probability.  When
+$\theta=0$ the model reduces to the uniform distribution over $\mathcal{S}_n$,
+and as $\theta$ grows the distribution concentrates around $\sigma_0$.  The
+Mallows model is thus the exponential-family analogue, on $\mathcal{S}_n$, of the
+Gaussian distribution on $\mathbb{R}^n$, with $\sigma_0$ playing the role of the
+mean and $\theta^{-1}$ that of the variance.
+
+\subsection{The Generalized Mallows Model}
+
+The generalized Mallows (GM) model \citep{Fligner_and_Verducci:1986} is an
+extension of the Mallows model which is also exponential and unimodal.  Instead
+of a single spread parameter $\theta$, the GM model uses an $(n-1)$-dimensional
+spread parameter $\bm{\theta} = (\theta_1,\ldots,\theta_{n-1})$, where each
+$\theta_j$ affects a particular position of the permutation.  This allows the
+distribution to put more emphasis on the consensus of certain positions while
+keeping more uncertainty in others.
+
+Not every distance that can be used in the Mallows model can be used in the GM
+model.  The GM model requires the distance to decompose as a sum of $n-1$ terms,
+\begin{equation}
+d(\sigma, \sigma_0) = \sum_{j=1}^{n-1} S_j(\sigma\sigma_0^{-1}) ,
+\label{eq:decomp}
+\end{equation}
+where the vector
+$\mathbf{S}(\sigma\sigma_0^{-1}) = (S_1(\sigma\sigma_0^{-1}),\ldots,S_{n-1}(\sigma\sigma_0^{-1}))$
+is the distance decomposition vector.  The GM model is then
+\begin{equation}
+P(\sigma) = \psi(\bm{\theta})^{-1}
+  \exp\left(\sum_{j=1}^{n-1} -\theta_j\, S_j(\sigma \sigma_0^{-1})\right) .
+\label{eq:gmallows}
+\end{equation}
+The decomposition vector is $\mathbf{V}(\cdot)$ of
+Eq.~\eqref{eq:kendall_decomp} for the Kendall's-$\tau$ distance and
+$\mathbf{X}(\cdot)$ of Eq.~\eqref{eq:cayley_decomp} for the Cayley distance.  In
+both cases the interpretation of $\theta_j$ is the same: the larger $\theta_j$,
+the larger the probability that position $j$ agrees with the consensus.  Since no
+decomposition vector is known for the Ulam distance, \texttt{perm\_pateda}
+provides five distance-based EDAs rather than six:
+MEDA$_K$, MEDA$_C$, MEDA$_U$, GMEDA$_K$ and GMEDA$_C$.
+
+\subsection{Learning the Mallows and Generalized Mallows Models}
+\label{sec:learning_mallows}
+
+Learning the parameters of a Mallows or GM model from a sample of permutations is
+either known or conjectured to be NP-hard for all the distances considered here.
+Within an EDA, however, the model that most accurately represents the selected
+solutions need not be learned at every generation: approximate models can even be
+beneficial, since they help to explore other areas of the search space, and they
+are computationally much cheaper.  The learning step is therefore split into two
+stages \citep{Irurozki:2014}:
+
+\begin{enumerate}
+ \item Approximate the central permutation $\sigma_0$.
+ \item Obtain the maximum-likelihood estimate (MLE) of the spread
+   parameter(s) $\bm{\theta}$ for the given distance.
+\end{enumerate}
+
+\paragraph{Stage 1: central permutation.}
+Three estimators are implemented in \texttt{consensus.py} and selected through
+the \texttt{consensus\_method} argument of every Mallows/GM learner
+(\texttt{"borda"}, the default; \texttt{"setmedian"}; \texttt{"best"}):
+
+\begin{itemize}
+\item \textbf{Borda} \citep{Borda:1781} (\texttt{find\_consensus\_borda}):
+  selects as central permutation the result of sorting the items according to
+  their average position across all the input permutations.  When the
+  permutations come from a Mallows model under the Kendall's-$\tau$ distance,
+  the Borda permutation is an asymptotically optimal estimator of the central
+  permutation \citep{Fligner_and_Verducci:1988}.  Although it can be used with
+  any distance, it is recommended exclusively for the Kendall's-$\tau$
+  distance.
+\item \textbf{SetMedianPermutation} (\texttt{find\_consensus\_median}): selects
+  the individual of the sample that minimizes the sum of distances to the rest,
+  under the distance of the model.  It is $O(M^2)$ in the number $M$ of selected
+  individuals and is the recommended default for the Cayley and Ulam distances.
+\item \textbf{BestPermutation} (\texttt{find\_consensus\_best}): chooses the
+  permutation with the best objective value.  This estimator requires the
+  fitness values, which the learners receive as \texttt{selected\_fitness}.
+\end{itemize}
+
+\noindent The dispatcher \texttt{get\_consensus(method, population, fitness,
+distance\_func)} implements the selection logic and raises an informative error
+when the information required by an estimator (fitness for \texttt{"best"}, a
+distance for \texttt{"setmedian"}) has not been supplied.
+
+\paragraph{Stage 2: spread parameters.}
+Once $\sigma_0$ has been obtained, the spread parameter(s) are estimated by
+equating the derivative of the log-likelihood to zero.  The resulting expressions
+differ for each distance, and in most cases a numerical method is used to
+approximate the solution; exact expressions can be found in
+\citet{Irurozki:2014,Irurozki_et_al:2016,Mandhani_and_Meila:2009}.
+\texttt{perm\_pateda} uses:
+
+\begin{itemize}
+  \item \texttt{LearnMallowsKendall}: the observed mean inversion vector
+    $\overline{\mathbf{V}}$ is matched against its expectation under the model,
+    and a bounded scalar minimization (\texttt{scipy.optimize.fminbound}) over
+    $\theta \in (0, \texttt{upper\_theta}]$ returns the MLE.  The
+    normalization constants $\psi_j(\theta)$ are computed in closed form.
+  \item \texttt{LearnGeneralizedMallowsKendall}: one $\theta_j$ per position is
+    obtained by solving the corresponding univariate equation, giving the
+    $(n-1)$-dimensional $\bm{\theta}$ together with the per-position probability
+    matrix of the $V_j$ values used by the sampler.
+  \item \texttt{LearnMallowsCayley} and
+    \texttt{LearnGeneralizedMallowsCayley}: the mean of the cycle-based
+    decomposition $\overline{\mathbf{X}}$ is used, and Newton's method
+    (\texttt{scipy.optimize.newton}, with the analytic derivative) solves the
+    likelihood equation; the resulting $\psi$ constants yield the vector of
+    probabilities $P(X_j = 1)$ consumed by the sampler.
+  \item \texttt{LearnMallowsUlam}: since the Ulam distance does not factorize,
+    the learner matches the \emph{expected} distance under the model with the
+    mean observed distance to $\sigma_0$.  This requires the number $N_d$ of
+    permutations at each Ulam distance $d$, which is enumerated exactly for
+    $n \leq 8$ and approximated by a Gaussian profile centred at
+    $n - 2\sqrt{n}$ for larger $n$.
+\end{itemize}
+
+All learners return a plain Python dictionary, which is the model container used
+throughout \texttt{perm\_pateda}; for instance
+\texttt{\{"consensus": $\sigma_0$, "theta": $\theta$, "model\_type":
+"mallows\_kendall", \ldots\}}.  This makes models trivially serializable and
+inspectable (Section~\ref{sec:knowledge}).
+
+\subsection{Sampling the Mallows and Generalized Mallows Models}
+
+Sampling means generating permutations from the model obtained in the learning
+stage, and the algorithm depends on the distance.
+
+Mallows and GM models under the Kendall's-$\tau$ and Cayley distances
+\emph{factorize}, which leads to efficient sampling algorithms.  Given the
+per-position distributions obtained in the learning step, the sampler first draws
+a decomposition vector ($\mathbf{V}$ for Kendall's-$\tau$, $\mathbf{X}$ for
+Cayley) coordinate by coordinate, and then converts that vector into a
+permutation, which is finally composed with $\sigma_0$.  This is the
+\emph{multistage sampler} of \citet{Irurozki:2014}, implemented by
+\texttt{SampleMallowsKendall}, \texttt{SampleMallowsCayley},
+\texttt{SampleGeneralizedMallowsKendall} and
+\texttt{SampleGeneralizedMallowsCayley}.  Its complexity is dominated by the
+vector-to-permutation conversion, $O(n^2)$ for Kendall's-$\tau$ and $O(n)$ per
+step for Cayley.
+
+For the Ulam distance, sampling a permutation at a prescribed distance is
+equivalent to sampling random standard Young tableaux, which is the
+\emph{distances sampler} of \citet{Irurozki:2014}.  \texttt{perm\_pateda} takes a
+simpler route: \texttt{SampleMallowsUlam} draws from
+Eq.~\eqref{eq:mallows} with a Metropolis--Hastings Markov chain whose proposal is
+a random transposition, accepting a move with probability
+$\min\{1, \exp(-\theta\,\Delta d_u)\}$.  The chain is run for
+\texttt{burn\_in} steps (default 1000 in \texttt{MallowsUlamEDA}) and one sample
+is collected every \texttt{step\_size} steps (default 100).  When $\theta > 10$
+the distribution is numerically degenerate and the sampler returns
+\texttt{sample\_size} copies of $\sigma_0$, avoiding a needless chain.
+
+\begin{lstlisting}
+import numpy as np
+from perm_pateda.learning.mallows import LearnMallowsCayley
+from perm_pateda.sampling.mallows import SampleMallowsCayley
+
+n, m = 10, 50
+rng  = np.random.default_rng(0)
+pop  = np.vstack([rng.permutation(n) for _ in range(m)])
+
+learner = LearnMallowsCayley()
+model = learner(generation=0, n_vars=n, cardinality=np.arange(n),
+                selected_pop=pop, selected_fitness=np.zeros(m),
+                consensus_method="setmedian")
+print(model["model_type"], model["theta"])
+
+sampler = SampleMallowsCayley()
+new_pop = sampler(n_vars=n, model=model, cardinality=np.arange(n),
+                  population=pop, fitness=np.zeros(m),
+                  sample_size=100, rng=rng)
+\end{lstlisting}
+
+\subsection{Kernels of Mallows Models under the Hamming Distance}
+\label{sec:kmm}
+
+Instead of estimating a single Mallows model centred on a consensus permutation,
+a \emph{kernel} model \citep{Arza_et_al:2020} places one Mallows kernel on
+\emph{each} selected solution and samples from the resulting mixture,
+\begin{equation}
+P(\sigma) = \frac{1}{M}\sum_{i=1}^{M}
+   \psi(\theta)^{-1}\exp\big(-\theta\, d_H(\sigma, \sigma_i)\big) ,
+\end{equation}
+where $\sigma_1,\ldots,\sigma_M$ are the selected permutations.  This preserves
+the diversity of the selected set, which a single unimodal model destroys, while
+still concentrating the probability mass around good solutions.
+
+\texttt{LearnHammingKMM} stores the selected population as the set of centres and
+computes $\theta$ from a \emph{scheduled} expected distance rather than by
+maximum likelihood.  The expected Hamming distance decreases exponentially
+along the run, from $E_0$ (default $n/2$, parameter
+\texttt{expected\_dist\_start}) to $E_{\max}$ (default $0.25$, parameter
+\texttt{expected\_dist\_end}):
+\begin{equation}
+E(t) = E_{\max} + \delta(p)\,(E_0 - E_{\max}), \qquad
+\delta(p) = \frac{e^{-\gamma p} - 1}{e^{-\gamma} - 1}, \qquad
+p = \frac{t}{t_{\max}} ,
+\end{equation}
+with $\gamma$ (default $5.14$) controlling the decay rate.  The value of
+$\theta$ matching a target expected distance is obtained by bisection on
+\begin{equation}
+\mathbb{E}[d_H] = \frac{\sum_{k} k\, S(n,k)\, e^{-\theta k}}
+                       {\sum_{k} S(n,k)\, e^{-\theta k}}, \qquad
+S(n,k) = \binom{n}{k} D_k ,
+\end{equation}
+computed in log-space for numerical stability and excluding the impossible value
+$k=1$.  \texttt{SampleHammingKMM} then implements the exact three-step sampler:
+choose a centre $\sigma_0$ uniformly at random among the stored centres, draw a
+distance $k$ with probability proportional to $S(n,k)e^{-\theta k}$, and build a
+permutation at Hamming distance exactly $k$ from $\sigma_0$ by choosing $k$
+positions and deranging them.  This schedule gives the algorithm an explicit
+exploration-to-exploitation transition without any adaptive parameter.
+
+\subsection{Histogram Models: EHM and NHM}
+
+Histogram models summarize the selected population with a matrix of first- or
+second-order statistics.  They were introduced for permutation problems by
+\citet{Tsutsui:2002} and compared in \citet{Tsutsui_et_al:2006}.
+
+\paragraph{Node histogram model (NHM).}
+The NHM records how often each item appears at each position,
+\begin{equation}
+\mathrm{NHM}[i,j] \;\propto\; \big|\{\sigma \in D^{Se} : \sigma(i) = j\}\big|
+   + \varepsilon, \qquad \varepsilon = \beta_{\text{ratio}} \cdot M ,
+\end{equation}
+each row being normalized to a probability distribution.  The bias
+$\varepsilon$, controlled by \texttt{beta\_ratio}, plays the role of a mutation
+operator: it prevents zero probabilities and keeps every item reachable at every
+position.  \texttt{SampleNHM} constructs a permutation position by position,
+drawing the item at position $i$ from the (renormalized) row $i$ restricted to
+the items not yet used, falling back to the uniform distribution over the
+remaining items when the restricted row has zero mass.
+
+\paragraph{Edge histogram model (EHM).}
+The EHM records how often item $b$ immediately follows item $a$,
+\begin{equation}
+\mathrm{EHM}[a,b] \;=\;
+   \big|\{\sigma \in D^{Se} : \exists\, i,\; \sigma(i)=a,\ \sigma(i+1)=b\}\big|
+   \;+\; \varepsilon ,
+\end{equation}
+with $\varepsilon = \beta_{\text{ratio}}\,\frac{M}{n-1}$ in the asymmetric case
+and $\varepsilon = \beta_{\text{ratio}}\,\frac{2M}{n-1}$ in the symmetric case
+(\texttt{symmetric=True}, the default), where the matrix is replaced by
+$\mathrm{EHM}+\mathrm{EHM}^\top$.  The symmetric variant is the appropriate one
+for undirected problems such as the symmetric TSP, in which a tour and its
+reverse are equivalent, while the asymmetric variant should be used when the
+direction of a transition matters.  \texttt{SampleEHM} starts from a randomly
+chosen item and extends the permutation greedily-at-random, at each step drawing
+the next item from the row of the current item restricted to the unused items.
+The EHM is a natural model for problems whose objective is defined on
+\emph{adjacency} (TSP, PFSP), whereas the NHM suits problems defined on
+\emph{absolute positions} (QAP, LOP).
+
+\subsection{The Plackett--Luce Model}
+
+The Plackett--Luce (PL) model \citep{Luce:1959,Plackett:1975} is a multistage
+model in which the permutation is generated by sampling without replacement
+proportionally to a vector of item weights $\mathbf{w} = (w_1,\ldots,w_n)$,
+$w_i > 0$:
+\begin{equation}
+P(\sigma) = \prod_{i=1}^{n}
+  \frac{w_{\sigma(i)}}{\sum_{j=i}^{n} w_{\sigma(j)}} .
+\label{eq:pl}
+\end{equation}
+The parameter $w_i$ measures the propensity of item $i$ to be ranked early.
+Unlike the Mallows model, the PL model is not defined through a distance, and it
+can represent distributions that are not unimodal in the metric sense; it was
+introduced in the EDA context by \citet{Ceberio_et_al:2013}.
+
+\texttt{LearnPlackettLuce} computes the MLE of $\mathbf{w}$ with the
+minorization--maximization (MM) algorithm of \citet{Hunter:2004}.  Writing $W_i$
+for the number of ``wins'' of item $i$ (the number of stages in which $i$ is
+chosen, i.e.\ the number of times $i$ appears in a position other than the last),
+the MM update is
+\begin{equation}
+w_i \;\leftarrow\;
+  W_i \Big/ \sum_{k=1}^{M} \sum_{p=1}^{\mathrm{pos}_k(i)}
+  \Big(\sum_{q \geq p} w_{\sigma_k(q)}\Big)^{-1} ,
+\end{equation}
+followed by normalization.  The implementation computes the inner double sum in
+$O(n)$ per ranking using suffix sums and cumulative sums, so one MM iteration
+costs $O(Mn)$; iterations stop after \texttt{max\_iter} (default 100) or when the
+$L_1$ change of $\mathbf{w}$ falls below \texttt{tol} (default $10^{-6}$).
+
+\texttt{SamplePlackettLuce} exploits the \emph{Gumbel-max} trick: adding i.i.d.\
+Gumbel noise to the log-weights and sorting the perturbed values produces exactly
+a draw from Eq.~\eqref{eq:pl}.  Sampling a whole population is thus a single
+vectorized \texttt{argsort} of an $(N,n)$ array, i.e.\ $O(Nn\log n)$, instead of
+$N$ sequential loops of $n$ normalizations.
+
+\subsection{Mixtures of Plackett--Luce Models}
+
+A single PL model has one mode; when the selected population contains several
+distinct groups of good solutions --- a common situation in multimodal
+permutation problems --- a \emph{mixture} of $K$ PL components,
+\begin{equation}
+P(\sigma) = \sum_{c=1}^{K} \beta_c \, P(\sigma \mid \mathbf{w}^{(c)}), \qquad
+\sum_c \beta_c = 1 ,
+\end{equation}
+is a far more faithful model.  \texttt{LearnPlackettLuceMixture} implements the
+spectral-EM algorithm (EM-LSR) of \citet{Nguyen_and_Zhang:2023}, in two phases:
+
+\begin{enumerate}
+  \item \textbf{Spectral initialization.}  Every ranking is embedded as a binary
+    pairwise-comparison vector of length $n(n-1)/2$, whose entry $(i,j)$ is $1$
+    if $i$ precedes $j$.  A truncated SVD of the resulting $(M, n(n-1)/2)$ matrix
+    is computed, the number of retained dimensions $\hat{r}$ is chosen adaptively
+    from the gaps between singular values, and $k$-means clusters the projected
+    rankings into $K$ groups.  A least-squares estimator then converts the
+    empirical pairwise-comparison probabilities of each cluster into an initial
+    parameter vector.
+  \item \textbf{EM refinement with weighted LSR.}  The E-step computes the
+    posterior responsibility of each component for each ranking, using
+    log-sum-exp for stability; the M-step re-estimates each component with
+    \emph{weighted Luce spectral ranking} \citep{Maystre_and_Grossglauser:2015},
+    which is an exact MLE step rather than a surrogate, obtained as the
+    stationary distribution of a Markov chain built from the weighted pairwise
+    statistics.
+\end{enumerate}
+
+The defaults used inside an EDA are deliberately loose
+(\texttt{max\_em\_iter=10}, \texttt{tol\_em=$10^{-4}$},
+\texttt{max\_iter\_lsr=20}), since a rough model estimated cheaply at every
+generation is preferable to an exact one estimated slowly.
+\texttt{SamplePlackettLuceMixture} draws the component index from $\bm{\beta}$
+and then applies the Gumbel-max trick with the corresponding weight vector,
+again fully vectorized.  The number of components is exposed as
+\texttt{n\_components} in \texttt{PlackettLuceMixtureEDA}.
+
+\subsection{Doubly Stochastic Matrix Models}
+
+A doubly stochastic matrix (DSM) $D \in [0,1]^{n\times n}$ --- all rows and all
+columns summing to one --- is, by the Birkhoff--von Neumann theorem, a convex
+combination of permutation matrices, and is therefore a natural parametric family
+of distributions over $\mathcal{S}_n$ \citep{Santucci_and_Ceberio:2023}.
+
+\texttt{LearnDSM} implements the smoothed learning scheme: the selected
+permutations are converted to permutation matrices $P_1,\ldots,P_M$, averaged,
+and mixed with the uniform DSM $U$ (all entries $1/n$),
+\begin{equation}
+D = \frac{1-\alpha}{M}\sum_{i=1}^{M} P_i + \alpha\, U ,
+\label{eq:dsm}
+\end{equation}
+where the smoothing factor $\alpha \in (0,1]$ prevents zero entries --- which
+would make some assignments unreachable --- and defaults to $1/n^2$.
+Equation~\eqref{eq:dsm} is the exact analogue, in permutation space, of the
+Laplace-smoothed marginals used by the discrete EDAs of \texttt{pateda}.
+
+Two samplers are provided:
+
+\begin{description}
+  \item[DSM-PS (probabilistic sampling)] builds one permutation iteratively: a
+    still-unassigned row of $D$ is chosen uniformly at random, the column is
+    drawn from the corresponding row probabilities renormalized over the
+    unassigned columns, and the matched row and column are removed.  The
+    probability of sampling $\sigma$ is
+    $\Pr(\sigma \mid D) = \prod_i d_{i,\sigma(i)} / \mathrm{Perm}(D)$, where
+    $\mathrm{Perm}(D)$ is the permanent of $D$.  Cost: $O(n^2)$ per permutation.
+  \item[DSM-AS (algebraic sampling)] draws a uniform random vector $v$, computes
+    $Dv$, and reads the permutation off the ranking relationship between $v$ and
+    $Dv$.  It is also $O(n^2)$ per permutation, but the cost is a matrix--vector
+    product, so it is fully vectorizable over the whole population and, in
+    practice, considerably faster thanks to optimized BLAS routines.
+\end{description}
+
+\subsection{\texorpdfstring{Models over Bijective Codings of $\mathcal{S}_n$}{Models over Bijective Codings of Sn}}
+\label{sec:representations}
+
+The modules \texttt{representations/} exploit a different idea: rather than
+defining a distribution on $\mathcal{S}_n$, map $\mathcal{S}_n$ bijectively onto
+a product space of bounded integers, in which every vector is a valid code, and
+then use a \emph{standard discrete} EDA model.  The abstract interface
+\texttt{PermutationRepresentation} requires three methods:
+\texttt{encode(perm)}, \texttt{decode(code)} and \texttt{get\_domain(n)}
+(the inclusive maximum value allowed at each position).  All three
+implementations are vectorized over a population.
+
+\begin{description}
+  \item[\texttt{LehmerRepresentation}] The Lehmer code (or factoradic
+    representation) \citep{Lehmer:1960,RegnierCoudert_and_McCall:2014}.  In the
+    right (default) variant, $c_i = |\{j > i : \sigma(j) < \sigma(i)\}|$, so
+    $c_i \in \{0,\ldots,n-1-i\}$ and $c_{n-1}=0$; the left variant counts
+    inversions to the left, giving $c_i \in \{0,\ldots,i\}$.  The right Lehmer
+    code is precisely the inversion vector $\mathbf{V}$ of
+    Eq.~\eqref{eq:kendall_decomp}, so a univariate model over Lehmer codes is
+    closely related to a generalized Mallows model under the Kendall's-$\tau$
+    distance centred on the identity.
+  \item[\texttt{FisherYatesRepresentation}] The sequence of draws performed by
+    the Fisher--Yates shuffle \citep{Fisher_and_Yates:1938,Durstenfeld:1964}: at
+    step $i$, $c_i \in \{0,\ldots,n-1-i\}$ is the offset of the element swapped
+    into position $i$.  Decoding replays the shuffle.
+  \item[\texttt{InsertionVectorRepresentation}] The insertion vector, obtained as
+    the left Lehmer code of the \emph{inverse} permutation, with
+    $c_i \in \{0,\ldots,i\}$: $c_i$ is the position at which item $i$ is inserted
+    into the partial permutation of items $0,\ldots,i-1$.  It is the coding
+    underlying insertion-based neighbourhoods, which are the natural move
+    operator for the LOP and the PFSP.
+\end{description}
+
+Three families of models are learned over these codings, all of them handling the
+fact that the domain size varies with the position:
+
+\begin{itemize}
+  \item \texttt{LearnUMDA} / \texttt{SampleLehmerUMDA},
+    \texttt{SampleFisherYatesUMDA}, \texttt{SampleInsertionVectorUMDA}:
+    independent per-position marginals with Laplace smoothing
+    (\texttt{laplace\_alpha}, default $0.01$ in the wrappers).  This is the
+    UMDA \citep{Muhlenbein_and_Paas:1996} transported to permutation space.
+  \item \texttt{LearnTree} / \texttt{SampleLehmerTree},
+    \texttt{SampleFisherYatesTree}: a Chow--Liu tree \citep{Chow_and_Liu:1968}
+    built from the pairwise mutual information between code positions, oriented
+    from a user-selected \texttt{root}, with one conditional probability table
+    per edge.  This is the Tree-EDA of \texttt{pateda} applied to a bijective
+    coding, and it can capture dependencies between positions that the
+    univariate model misses.
+  \item \texttt{LearnInsertionVectorChain} /
+    \texttt{SampleInsertionVectorChain}: a first-order Markov chain over the
+    insertion vector, $P(c) = P(c_0)\prod_{i\geq 1} P(c_i \mid c_{i-1})$, with
+    smoothed conditional tables of shape $(i, i+1)$.
+\end{itemize}
+
+Because \emph{every} code decodes to a permutation, no repair operator is ever
+needed, and the learned model can be inspected with the same tools as a discrete
+\texttt{pateda} model.
+
+\subsection{Random-Key EDAs}
+
+Random keys \citep{Bean:1994} encode a permutation as a real vector
+$x \in [0,1]^n$; the permutation is recovered as the ordering induced by sorting
+$x$.  Since every real vector decodes to a valid permutation, any
+\emph{continuous} EDA can be used to search $\mathcal{S}_n$.  The module
+\texttt{random\_keys.py} provides the conversions:
+
+\begin{center}
+\begin{tabular}{lp{9.2cm}}
+\toprule
+Function & Description \\
+\midrule
+\texttt{random\_keys\_to\_permutation(x)} & Stable \texttt{argsort} of the keys;
+  works on a single vector or a whole population \\
+\texttt{permutation\_to\_random\_keys(p)} & Assigns evenly spaced keys in
+  $[0,1]$ consistent with the given order, with optional jitter \\
+\texttt{random\_keys\_to\_ranks(x)} & 1-based ranks of the keys \\
+\texttt{rescale\_random\_keys(x)} & Rank-based rescaling
+  $x_i \leftarrow (\mathrm{rank}_i - 1)/(n-1)$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The three algorithm classes \texttt{RKGaussianUMDAEDA},
+\texttt{RKGaussianFullEDA} and \texttt{RKCopulaVinesEDA} implement the RK-EDA of
+\citet{Ayodele_et_al:2016} with the continuous learners and samplers of
+\texttt{pateda} (univariate Gaussian, full multivariate Gaussian, and vine
+copulas respectively).  The two mechanisms that make RK-EDA effective are both
+exposed as constructor flags:
+
+\begin{description}
+  \item[Diminishing variance / rescaling (\texttt{diminishing=True})] The
+    selected keys are rank-rescaled to evenly spaced values in $[0,1]$ before the
+    model is learned, and the sampled keys are rescaled again.  This removes the
+    arbitrary scale of the keys and keeps the mapping to permutations
+    well conditioned.
+  \item[Cooling (\texttt{cooling=True})] The standard deviation used for sampling
+    is not the one estimated from the data but a scheduled value
+    \begin{equation}
+    \sigma_g = \max\left(\sigma_0 \cdot \max\left(1 - \frac{g}{G},\,0\right),\,
+                          \sigma_{\min}\right), \qquad
+    \sigma_0 = \frac{1}{\pi \log_{10} n} ,
+    \end{equation}
+    which decreases linearly with the generation $g$.  The correlation structure
+    learned by the model is preserved: for a full-covariance model the covariance
+    matrix is converted to a correlation matrix and rescaled to the target
+    variance.  For the vine-copula variant, which has no explicit variance
+    parameter, Gaussian noise of standard deviation $\sigma_g$ is added to the
+    sampled keys instead.
+\end{description}
+
+\subsection{Fourier-Based Models (experimental)}
+
+The modules \texttt{multiobjective/meda\_d\_f.py},
+\texttt{multiobjective/fourier\_moead.py} and
+\texttt{multiobjective/moead.py} implement algorithms based on the Fourier
+decomposition of permutation functions
+\citep{Chicano_et_al:2023,Kondor_et_al:2007}, in which a pseudo-Boolean-like
+spectral expansion of the objective over $\mathcal{S}_n$ is truncated at a small
+order and used either as a surrogate for pre-screening candidates
+(\texttt{FourierMOEAD}) or as a probability model to be combined across
+objectives (\texttt{MEDA\_D\_F}).  These three modules import a
+\texttt{perm\_pateda.fourier} package (and the auxiliary modules
+\texttt{perm\_pateda.distributions} and \texttt{perm\_pateda.utils.permutations})
+that are \emph{not part of the current distribution}: they come from the separate
+\texttt{permutation\_fourier} project.  Consequently they are not re-exported by
+\texttt{perm\_pateda.multiobjective.\_\_init\_\_} and are not importable out of
+the box.  They are documented here for completeness and should be regarded as
+experimental until that dependency is vendored or declared.
+
+\subsection{Summary of the Model Catalogue}
+
+Table~\ref{tab:models} lists every learning/sampling pair provided by
+\texttt{perm\_pateda}, with the module in which it is implemented.
+
+\begin{table}[ht]
+\centering
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{llll}
+\toprule
+\textbf{Model} & \textbf{Learner} & \textbf{Sampler} & \textbf{Module} \\
+\midrule
+Mallows, Kendall's-$\tau$ & \texttt{LearnMallowsKendall} & \texttt{SampleMallowsKendall} & \texttt{mallows} \\
+Mallows, Cayley & \texttt{LearnMallowsCayley} & \texttt{SampleMallowsCayley} & \texttt{mallows} \\
+Mallows, Ulam & \texttt{LearnMallowsUlam} & \texttt{SampleMallowsUlam} & \texttt{mallows} \\
+GM, Kendall's-$\tau$ & \texttt{LearnGeneralizedMallowsKendall} & \texttt{SampleGeneralizedMallowsKendall} & \texttt{mallows} \\
+GM, Cayley & \texttt{LearnGeneralizedMallowsCayley} & \texttt{SampleGeneralizedMallowsCayley} & \texttt{mallows} \\
+Mallows kernels, Hamming & \texttt{LearnHammingKMM} & \texttt{SampleHammingKMM} & \texttt{hamming\_kmm} \\
+Edge histogram & \texttt{LearnEHM} & \texttt{SampleEHM} & \texttt{histogram} \\
+Node histogram & \texttt{LearnNHM} & \texttt{SampleNHM} & \texttt{histogram} \\
+Plackett--Luce & \texttt{LearnPlackettLuce} & \texttt{SamplePlackettLuce} & \texttt{plackett\_luce} \\
+Mixture of PL & \texttt{LearnPlackettLuceMixture} & \texttt{SamplePlackettLuceMixture} & \texttt{mixture\_plackett\_luce} \\
+Doubly stochastic matrix & \texttt{LearnDSM} & \texttt{SampleDSMPS}, \texttt{SampleDSMAS} & \texttt{dsm} \\
+Lehmer, univariate & \texttt{LearnLehmerUMDA} & \texttt{SampleLehmerUMDA} & \texttt{lehmer} \\
+Lehmer, tree & \texttt{LearnLehmerTree} & \texttt{SampleLehmerTree} & \texttt{lehmer} \\
+Fisher--Yates, univariate & \texttt{LearnFisherYatesUMDA} & \texttt{SampleFisherYatesUMDA} & \texttt{fisher\_yates} \\
+Fisher--Yates, tree & \texttt{LearnFisherYatesTree} & \texttt{SampleFisherYatesTree} & \texttt{fisher\_yates} \\
+Insertion vector, univariate & \texttt{LearnInsertionVectorUMDA} & \texttt{SampleInsertionVectorUMDA} & \texttt{vinsertion} \\
+Insertion vector, Markov chain & \texttt{LearnInsertionVectorChain} & \texttt{SampleInsertionVectorChain} & \texttt{vinsertion} \\
+\bottomrule
+\end{tabular}
+\caption{Learning and sampling methods available in \texttt{perm\_pateda}.
+Module names are relative to \texttt{perm\_pateda.learning} and
+\texttt{perm\_pateda.sampling}.  Random-key EDAs reuse the continuous learners
+and samplers of \texttt{pateda}.}
+\label{tab:models}
+\end{table}
+
+Each learner exposes the signature
+\texttt{learn(generation, n\_vars, cardinality, population, fitness, **params)}
+(or the equivalent \texttt{\_\_call\_\_} with \texttt{selected\_pop} /
+\texttt{selected\_fitness}) and returns a model dictionary; each sampler exposes
+\texttt{sample(n\_vars, model, cardinality, population, fitness, sample\_size,
+rng)} and returns an \texttt{(sample\_size, n\_vars)} integer array of valid
+permutations.  Implementing a new permutation model amounts to writing this pair.
+
+%% ============================================================
+\section{EDA Components}
+\label{sec:components}
+%% ============================================================
+
+Apart from learning and sampling, all the components of an EDA are
+representation agnostic and are inherited unchanged from \texttt{pateda}.  This
+section states which ones apply to permutations and documents the single
+component that \texttt{perm\_pateda} contributes.
+
+\subsection{Seeding Methods}
+
+\texttt{PermutationInit} (\texttt{seeding/permutation\_init.py}) is the
+permutation counterpart of \texttt{RandomInit}: it generates \texttt{pop\_size}
+permutations of $\mathtt{range(n\_vars)}$ drawn uniformly at random, i.e.\ a
+sample from the uniform distribution over $\mathcal{S}_n$, which is the Mallows
+model with $\theta = 0$.  It implements the \texttt{pateda}
+\texttt{SeedingMethod} interface, so it can be used both from the wrappers and
+from \texttt{EDAComponents}.  Biased initialization --- seeding the population
+with solutions produced by a construction heuristic --- is discussed in
+Section~\ref{sec:apriori}.
+
+\subsection{Selection Methods}
+
+All \texttt{pateda} selection operators apply directly, since selection only
+depends on the fitness values: truncation, proportional, tournament, Boltzmann,
+and the multi-objective schemes.  The plug-and-play wrappers hard-code
+\emph{truncation selection} with ratio \texttt{selection\_ratio}, which is the
+standard choice in the permutation EDA literature (the experimental study of
+\citet{Irurozki_et_al:2018} selects the best $10\%$ of a population of size
+$10n$).  Use the component path to employ any other operator.
+
+\subsection{Replacement Methods}
+
+Likewise, all \texttt{pateda} replacement operators are usable.  The wrappers
+implement \emph{elitism} directly: the best permutation found so far is
+reinserted in place of the worst individual of the new population whenever the
+new population does not improve on it.  Population aggregation --- adding the
+$N$ new solutions to the current population and keeping the best $N$, the
+replacement used in \citet{Irurozki_et_al:2018} --- is available as
+\texttt{pateda.replacement.ElitistReplacement} through the component path.
+
+\subsection{Stopping Conditions}
+
+Inherited from \texttt{pateda}: maximum number of generations, maximum number of
+evaluations, target fitness, and stagnation-based criteria.  The wrappers use a
+fixed number of generations (\texttt{n\_gen}).
+
+\subsection{Local Optimization}
+
+\texttt{pateda} local search operators that assume a discrete Cartesian
+representation (bit-flip hill climbing, and the like) are \emph{not} applicable
+to permutations.  Permutation local search must use permutation neighbourhoods
+--- swap, insertion (\emph{jump}), or 2-opt --- and can be supplied as a custom
+\texttt{LocalOptimizationMethod} through \texttt{EDAComponents}.  The
+multi-objective algorithms of Section~\ref{sec:multiobjective} accept an external
+perturbation operator directly through the \texttt{mutation\_fn} argument
+(a callable \texttt{(perm, rng) -> perm}) and its application probability
+\texttt{mutation\_rate}, and additionally implement a \emph{shaking} mechanism:
+after \texttt{shake\_threshold} generations without improvement, a subproblem's
+incumbent is perturbed with \texttt{shake\_strength} random insertion moves.
+
+\subsection{Repairing Methods}
+
+Repair operators, which are essential when a model may generate infeasible
+solutions, are \emph{unnecessary} in \texttt{perm\_pateda}: every sampler returns
+a valid permutation by construction, either because the model is defined on
+$\mathcal{S}_n$ and sampled sequentially without replacement, or because the
+representation is a bijective coding, or because the random-key decoding is a
+sort.  This is the central design advantage of permutation-specific models over
+the naive use of an integer-vector EDA.
+
+\subsection{Mutation and Crossover}
+
+\texttt{perm\_pateda} does not implement permutation crossover operators
+(order crossover, PMX, cycle crossover) as first-class components; where a
+crossover is needed --- for example in the candidate-generation step of the
+Fourier-assisted multi-objective algorithms --- it is implemented locally in the
+corresponding module.  Permutation mutation is available through the
+\texttt{mutation\_fn} hook described above.
+
+%% ============================================================
+\section{Test Functions and Benchmark Problems}
+\label{sec:functions}
+%% ============================================================
+
+The \texttt{functions/} package contains seven permutation problems.  Each
+problem is a class whose \texttt{\_\_call\_\_} returns a value to be
+\emph{maximized} (Section~\ref{sec:eda}), accompanied by random-instance
+generators and, where applicable, a loader for the standard benchmark format.
+Following the organization of \texttt{perm\_mateda}, each problem separates
+instance reading from solution evaluation.
+
+\subsection{Classical Permutation Problems}
+
+\begin{description}
+  \item[\textbf{Travelling Salesman Problem (TSP)}]
+    (\texttt{functions/tsp.py}).  An instance is an $n \times n$ matrix of
+    distances between cities.  A permutation is a Hamiltonian cycle and its cost
+    is
+    $\sum_{i=1}^{n} D[\sigma(i), \sigma(i \bmod n + 1)]$,
+    including the wrap-around edge; \texttt{\_\_call\_\_} returns its negation.
+    The implementation validates that the matrix is symmetric.  Generators:
+    \texttt{create\_random\_tsp(n\_cities, seed)} (random symmetric matrix) and
+    \texttt{create\_tsp\_from\_coordinates(coords)} (Euclidean distances from a
+    set of 2-D points).  Reader: \texttt{parse\_tsplib} \citep{Reinelt:1991}.
+  \item[\textbf{Permutation Flowshop Scheduling Problem (PFSP)}]
+    (\texttt{functions/pfsp.py}).  An instance is an $n \times m$ matrix of
+    processing times, $P[i,j]$ being the time job $i$ spends on machine $j$; all
+    jobs traverse the machines in the same order, and a permutation fixes the
+    order of the jobs.  Two objectives are supported through the
+    \texttt{objective} argument: \texttt{"makespan"}, the completion time of the
+    last job on the last machine, and \texttt{"flowtime"}, the sum of the
+    completion times of all jobs.  Both are computed from the standard
+    completion-time recurrence
+    $C_{i,j} = \max(C_{i-1,j}, C_{i,j-1}) + P[\sigma(i), j]$, and returned
+    negated.  Generator: \texttt{create\_random\_pfsp}; reader:
+    \texttt{parse\_taillard\_pfsp} \citep{Taillard:1993} together with
+    \texttt{load\_taillard\_instance}.  The distance-based EDA of
+    \citet{Ceberio_et_al:2014} was designed for this problem.
+  \item[\textbf{Linear Ordering Problem (LOP)}]
+    (\texttt{functions/lop.py}).  An instance is an $n \times n$ matrix $B$; the
+    objective is to find the permutation maximizing
+    $\sum_{i<j} B[\sigma(i), \sigma(j)]$, i.e.\ the sum of the entries above the
+    diagonal of the permuted matrix \citep{Grotschel_et_al:1984,Marti_and_Reinelt:2011}.
+    It has applications in ranking and aggregation, input--output economics,
+    archaeological seriation and the feedback arc set problem.  Generators:
+    \texttt{create\_random\_lop}, \texttt{create\_tournament\_lop} (a random
+    tournament, where the optimum is a ranking), \texttt{create\_triangular\_lop}
+    (an instance with a planted optimum), \texttt{create\_sparse\_lop} (with a
+    prescribed density), plus \texttt{feedback\_arc\_set\_to\_lop} which converts
+    a directed graph into the equivalent LOP.  Reader: \texttt{parse\_lolib}
+    together with \texttt{load\_lolib\_instance}.
+  \item[\textbf{Quadratic Assignment Problem (QAP)}]
+    (\texttt{functions/qap.py}).  An instance consists of a flow matrix $F$
+    between facilities and a distance matrix $D$ between locations
+    \citep{Koopmans_and_Beckmann:1957,Cela:1998}; a permutation assigns
+    facilities to locations and its cost is
+    $\sum_{i,j} F[i,j]\, D[\sigma(i), \sigma(j)]$, returned negated by default
+    (\texttt{minimize=True}).  Generators: \texttt{create\_random\_qap} (with an
+    optional sparse flow matrix), \texttt{create\_uniform\_qap} and
+    \texttt{create\_grid\_qap} (locations on a regular grid, a structured and
+    notoriously hard family).  Reader: \texttt{parse\_qaplib}
+    \citep{Burkard_et_al:1997} together with \texttt{load\_qaplib\_instance}.
+\end{description}
+
+\subsection{Graph Problems under the Permutation Picture}
+
+Three classical graph problems are included in the formulation of
+\citet{Min:2024}, in which a permutation $\sigma$ of the vertices together with a
+cut point $k$ encodes a subset of vertices, and the constraint is expressed
+through the trace $\mathrm{Tr}(P A P^\top C(k))$ of the permuted adjacency matrix
+against a truncation matrix $C(k)$.  This reformulation turns three subset
+selection problems into permutation problems, so that any permutation EDA can be
+applied to them.
+
+\begin{description}
+  \item[\textbf{Maximum Independent Set (MIS)}] (\texttt{functions/mis.py}).
+    Maximize $k$ subject to $\mathrm{Tr}(P A P^\top C(k)) = 0$, with $C(k)$ the
+    $k\times k$ upper-left block of ones.  A permutation is evaluated by scanning
+    it and greedily accumulating the vertices that are not adjacent to any
+    already selected vertex; the fitness is the size of the resulting independent
+    set.  Auxiliary methods: \texttt{evaluate\_independent\_set} returns the set
+    itself and \texttt{is\_valid\_independent\_set} verifies it.  Generators:
+    \texttt{create\_random\_mis(n, edge\_probability, seed)} and
+    \texttt{create\_mis\_from\_edges(n, edges)}.
+  \item[\textbf{Maximum Cut (MaxCut)}] (\texttt{functions/maxcut.py}).  Maximize
+    $\tfrac12\mathrm{Tr}(P A P^\top C(k))$ with
+    $C(k)_{ij} = 1$ iff $(i \leq k < j)$ or $(j \leq k < i)$.  A permutation is
+    evaluated by trying all $n-1$ cut points and returning the largest cut found,
+    so that the encoded solution is the pair (permutation, best cut point).
+    \texttt{evaluate\_cut} additionally returns the cut point and the two vertex
+    subsets.  Generators: \texttt{create\_random\_max\_cut},
+    \texttt{create\_max\_cut\_from\_edges}.
+  \item[\textbf{Minimum Vertex Cover (MVC)}] (\texttt{functions/mvc.py}).
+    Minimize $k$ subject to $\mathrm{Tr}(P A P^\top C(k)) = 0$ with
+    $C(k)_{ij} = 1$ iff $i>k$ and $j>k$, i.e.\ no edge lies entirely outside the
+    first $k$ vertices.  The fitness returned is $-k$, consistent with the
+    maximization convention.  Generators: \texttt{create\_random\_mvc},
+    \texttt{create\_mvc\_from\_edges}.
+\end{description}
+
+\subsection{Benchmark Instance Readers}
+
+The module \texttt{utils/benchmark\_parsers.py} implements readers for the four
+standard benchmark libraries used in the permutation EDA literature.  Each
+returns plain \texttt{numpy} arrays that can be fed directly to the corresponding
+problem class:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+Function & Library & Returns \\
+\midrule
+\texttt{parse\_lolib(path)} & LOLIB (LOP) & $(n,n)$ weight matrix \\
+\texttt{parse\_taillard\_pfsp(path)} & Taillard (PFSP) & $(n_{\text{jobs}}, n_{\text{machines}})$ times \\
+\texttt{parse\_qaplib(path)} & QAPLIB (QAP) & (flow, distance) matrices \\
+\texttt{parse\_tsplib(path)} & TSPLIB (TSP) & $(n,n)$ distance matrix \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{lstlisting}
+from perm_pateda import parse_qaplib
+from perm_pateda.functions import load_qaplib_instance
+from perm_pateda import GMallowsCayleyEDA
+
+flow, dist = parse_qaplib("instances/tai40b.dat")
+qap = load_qaplib_instance(flow, dist)
+
+alg = GMallowsCayleyEDA(n_vars=qap.n, fitness_func=qap,
+                        pop_size=10 * qap.n, n_gen=500,
+                        selection_ratio=0.1, random_seed=111)
+stats, _ = alg.run()
+print("Best cost:", -stats.best_fitness_overall)
+\end{lstlisting}
+
+%% ============================================================
+\section{Multi-Objective Optimization}
+\label{sec:multiobjective}
+%% ============================================================
+
+\subsection{Multi-Objective Problem Definition}
+
+A multi-objective permutation problem requires the simultaneous optimization of
+$m$ objectives $f_1(\sigma), \ldots, f_m(\sigma)$ over $\mathcal{S}_n$.  Since
+the objectives usually conflict, the goal is the \emph{Pareto front}: the set of
+non-dominated permutations, for which no objective can be improved without
+degrading another.  In \texttt{perm\_pateda} the objectives are supplied as a
+list of callables, each mapping a 0-indexed permutation to a float, together with
+a tuple of \texttt{minimize} flags (one per objective, all \texttt{True} by
+default), which allows mixing minimization and maximization objectives in a
+single problem.
+
+\subsection{Pareto Dominance and Archive}
+
+The module \texttt{multiobjective/pareto.py} provides
+\texttt{dominates(a, b, minimize)}, \texttt{pareto\_front(objectives, minimize)}
+--- returning the indices of the non-dominated rows --- and the class
+\texttt{ParetoArchive}, an unbounded external archive.  \texttt{ParetoArchive.add}
+inserts a solution only if it is not dominated by an existing member and is not a
+numerical duplicate of one, and removes every member that the new solution
+dominates.  \texttt{get\_front()} returns the pair (solutions, objectives).
+
+\subsection{Scalarization}
+
+The module \texttt{multiobjective/scalarization.py} implements the two
+scalarization functions used by decomposition-based algorithms:
+\begin{align}
+g^{ws}(\sigma \mid \mathbf{w}) &= \sum_{i=1}^{m} w_i f_i(\sigma), \\
+g^{te}(\sigma \mid \mathbf{w}, \mathbf{z}^\ast) &=
+  \max_{1 \leq i \leq m} w_i\, |f_i(\sigma) - z_i^\ast| ,
+\end{align}
+where $\mathbf{z}^\ast$ is the ideal (reference) point.  The Tchebycheff
+formulation guarantees that every Pareto-optimal solution can be recovered by
+some weight vector, which the weighted sum does not; it is the default in all the
+MEDA/D algorithms.  Internally these algorithms use \emph{normalized} variants,
+in which the objectives are rescaled by the current $(\mathbf{z}^\ast,
+\mathbf{z}^{\text{nad}})$ box, so that objectives on very different scales
+(as in bi-objective TSP/QAP combinations) contribute comparably.
+
+\subsection{The MEDA/D Family}
+
+\texttt{perm\_pateda} implements the multi-objective decomposition-based EDA
+framework of \citet{Zangari_et_al:2017}, which combines the MOEA/D decomposition
+scheme \citep{Zhang_and_Li:2007} with permutation probability models.  The
+multi-objective problem is decomposed into $N$ scalar subproblems defined by
+uniformly spread weight vectors; each subproblem $k$ keeps one incumbent
+solution, and its neighbourhood $B(k)$ consists of the $T$ subproblems with the
+closest weight vectors.  At each generation, and for each subproblem, a model is
+estimated from the neighbourhood (or a kernel is centred on the incumbent), one
+new permutation is sampled from it, evaluated, and used to replace up to
+\texttt{nr} neighbours that it improves under their scalarized objective.  The
+external \texttt{ParetoArchive} accumulates the non-dominated solutions found.
+
+The framework is instantiated with nine models, all sharing the same interface:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Class} & \textbf{Model} & \textbf{Module} \\
+\midrule
+\texttt{MEDA\_D\_MK} & Kernels of Mallows models, Cayley distance & \texttt{meda\_d\_mk} \\
+\texttt{MEDA\_D\_KENDALL} & Mallows, Kendall's-$\tau$ & \texttt{meda\_d\_mk} \\
+\texttt{MEDA\_D\_ULAM} & Mallows, Ulam & \texttt{meda\_d\_mk} \\
+\texttt{MEDA\_D\_GMKENDALL} & Generalized Mallows, Kendall's-$\tau$ & \texttt{meda\_d\_mk} \\
+\texttt{MEDA\_D\_GMCAYLEY} & Generalized Mallows, Cayley & \texttt{meda\_d\_mk} \\
+\texttt{MEDA\_D\_PLACKETT\_LUCE} & Plackett--Luce & \texttt{meda\_d\_pl} \\
+\texttt{MEDA\_D\_MIXTURE\_PLACKETT\_LUCE} & Mixture of Plackett--Luce & \texttt{meda\_d\_pl} \\
+\texttt{MEDA\_D\_NHM} & Node histogram model & \texttt{meda\_d\_hm} \\
+\texttt{MEDA\_D\_EHM} & Edge histogram model & \texttt{meda\_d\_hm} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+All of them accept the constructor parameters \texttt{objectives}, \texttt{n},
+\texttt{n\_subproblems} ($N$), \texttt{neighbourhood\_size} ($T$), \texttt{nr},
+\texttt{scalarization}, \texttt{shake\_threshold}, \texttt{shake\_strength},
+\texttt{minimize}, \texttt{seed}, and the optional external perturbation
+operator \texttt{mutation\_fn} with its probability \texttt{mutation\_rate}
+(disabled by default).  \texttt{MEDA\_D\_MK} additionally takes the fixed kernel
+spread \texttt{theta}; the histogram variants take \texttt{selection\_ratio} and
+\texttt{beta\_ratio}; the mixture variant takes the number of components.  The
+method
+\texttt{run(n\_generations, verbose, initial\_population, generation\_callback)}
+returns a dictionary with the keys \texttt{pareto\_solutions},
+\texttt{pareto\_objectives}, \texttt{final\_population} and
+\texttt{final\_objectives}.  The \texttt{generation\_callback} hook makes it easy
+to track quality indicators along the run.
+
+\begin{lstlisting}
+import numpy as np
+from perm_pateda.multiobjective import MEDA_D_GMCAYLEY
+from perm_pateda.functions import create_random_qap, create_random_lop
+
+n = 20
+qap = create_random_qap(n, seed=1)
+lop = create_random_lop(n, seed=2)
+
+# both objectives expressed as minimization
+objectives = [lambda p: -qap(p), lambda p: -lop(p)]
+
+alg = MEDA_D_GMCAYLEY(
+    objectives=objectives, n=n,
+    n_subproblems=50, neighbourhood_size=10, nr=2,
+    scalarization="tchebycheff",
+    minimize=(True, True), seed=0,
+)
+result = alg.run(n_generations=200, verbose=True)
+print("Pareto front size:", len(result["pareto_solutions"]))
+\end{lstlisting}
+
+\subsection{Relation to the \texttt{pateda} Multi-Objective Module}
+
+\texttt{pateda} addresses multi-objective problems mainly by modifying the
+selection scheme (non-dominated sorting, crowding distance, indicator-based
+selection) and provides quality indicators, an external archive and a MOEA/D
+implementation; see the corresponding section of the \texttt{pateda} user guide.
+Those components can be combined with the permutation learners and samplers
+through \texttt{EDAComponents} whenever a Pareto-selection-based rather than a
+decomposition-based algorithm is desired.  The MEDA/D classes described above are
+self-contained implementations that do not go through the \texttt{pateda}
+executor, because the model is re-estimated per subproblem rather than once per
+generation.
+
+%% ============================================================
+\section{Model Inspection and Statistical Analysis}
+\label{sec:knowledge}
+%% ============================================================
+
+\subsection{Inspecting the Learned Models}
+
+Because every learner returns a plain dictionary, the model is directly
+inspectable and can be logged at every generation.  The most informative
+quantities are:
+
+\begin{center}
+\begin{tabular}{lp{8.6cm}}
+\toprule
+\textbf{Key} & \textbf{Meaning} \\
+\midrule
+\texttt{consensus} & Central permutation $\sigma_0$ of a Mallows/GM model; its
+  evolution shows which orderings the search converges to \\
+\texttt{theta} & Spread parameter; the transition from small to large $\theta$
+  marks the exploration-to-exploitation switch of the run \\
+\texttt{thetas} & The $(n-1)$ per-position spreads of a GM model; positions with
+  large $\theta_j$ have already converged \\
+\texttt{ehm\_matrix}, \texttt{nhm\_matrix} & Edge/node frequency matrices; their
+  entropy is a direct diversity measure \\
+\texttt{weights} & Plackett--Luce item weights, i.e.\ an estimated ranking \\
+\texttt{dsm} & Doubly stochastic matrix; its distance to a permutation matrix
+  measures convergence \\
+\texttt{marginals}, \texttt{conditionals} & Tables of the models over bijective
+  codings, in the same format used by \texttt{pateda} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Tracking $\theta$ across generations reproduces the two-phase behaviour reported
+by \citet{Irurozki_et_al:2018}: in the first generations $\theta$ takes very low
+values, denoting a large spread among the solutions in the population
+(exploration), and later it increases rapidly, indicating convergence
+(exploitation).  At that point the probability of sampling a solution far from
+the consensus becomes extremely low, so practitioners may wish to cap the maximum
+$\theta$ (parameter \texttt{upper\_theta} of the learners) to delay stagnation.
+
+Since the models over bijective codings (Section~\ref{sec:representations}) are
+ordinary discrete probabilistic graphical models, the whole
+\texttt{knowledge\_extraction} module of \texttt{pateda} --- dependency measures,
+network measures, structure visualization --- applies to them without
+modification.
+
+\subsection{Statistical Comparison Utilities}
+
+The module \texttt{utils/stats\_utils.py} implements the comparison protocol used
+in the permutation EDA literature \citep{Ceberio_et_al:2015,Demsar:2006}.  Its
+input is a \texttt{pandas} \texttt{DataFrame} whose rows are problem instances
+and whose columns are algorithms:
+
+\begin{center}
+\begin{tabular}{lp{8.6cm}}
+\toprule
+Function & Description \\
+\midrule
+\texttt{summary\_table(df)} & Mean $\pm$ standard deviation, best value and
+  average rank per algorithm \\
+\texttt{friedman\_test(df)} & Friedman omnibus test across algorithms; returns
+  the statistic, the $p$-value and the average ranks \\
+\texttt{wilcoxon\_pairwise(df)} & Matrix of pairwise Wilcoxon signed-rank
+  $p$-values \\
+\texttt{critical\_difference\_plot(df, alpha, filepath)} & Critical-difference
+  diagram (Nemenyi) saved to file \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+%% ============================================================
+\section{Injecting A-Priori Knowledge}
+\label{sec:apriori}
+%% ============================================================
+
+\texttt{pateda} offers several mechanisms to inject a-priori problem-structure
+information into an EDA: fixed factorizations, interaction matrices constraining
+the structures a learner may consider, biased initialization, and constrained
+search.  Their general description is given in the \texttt{pateda} user guide.
+In the permutation setting they specialize as follows.
+
+\begin{description}
+  \item[Biased initialization] Any set of permutations --- for instance produced
+    by a construction heuristic such as NEH for the PFSP or nearest-neighbour for
+    the TSP --- can be passed as the initial population.  The multi-objective
+    algorithms accept it directly through the \texttt{initial\_population}
+    argument of \texttt{run()}; for the single-objective wrappers, replace the
+    seeding component through \texttt{EDAComponents}.
+  \item[Structural priors] The tree models over bijective codings accept a
+    \texttt{root} argument that fixes the orientation of the dependency tree; a
+    problem-informed choice of root (e.g.\ the position known to be most
+    constrained) acts as a mild structural prior.  Restricting the set of
+    candidate edges through an interaction matrix, as \texttt{pateda} does for
+    Tree-EDA\_r, transfers directly to \texttt{LearnTree}.
+  \item[Model priors] The smoothing parameters play the role of a prior over the
+    model: \texttt{beta\_ratio} in the histogram models, \texttt{alpha} in the
+    DSM models, and \texttt{laplace\_smoothing} in the coding-based models.
+    Larger values keep more of the uniform distribution in the mixture and thus
+    slow down convergence.  In the Mallows kernels, the schedule
+    $(E_0, E_{\max}, \gamma)$ is an explicit, problem-independent prior on the
+    exploration/exploitation trade-off.
+  \item[Choice of distance and model] The strongest form of a-priori knowledge in
+    a permutation EDA is the choice of the distance or model family itself, since
+    it determines which discrepancies between permutations the search considers
+    small.  Section~\ref{sec:models} summarizes the recommended correspondences.
+\end{description}
+
+%% ============================================================
+\section{Relation to \texttt{perm\_mateda} and Coverage}
+\label{sec:coverage}
+%% ============================================================
+
+\texttt{perm\_pateda} takes as its reference point the \texttt{perm\_mateda}
+Matlab toolbox \citep{Irurozki_et_al:2018}, which extended MATEDA-2.0
+\citep{Santana_et_al:2009b} with the Mallows and generalized Mallows models under
+the Kendall's-$\tau$, Cayley and Ulam distances, three central-permutation
+estimators, the matched samplers, and four permutation problems.
+Table~\ref{tab:coverage} summarizes the correspondence.
+
+\begin{table}[ht]
+\centering
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Component} & \textbf{\texttt{perm\_mateda}} & \textbf{\texttt{perm\_pateda}} \\
+\midrule
+MEDA-Kendall     & yes & \texttt{MallowsKendallEDA} \\
+MEDA-Cayley      & yes & \texttt{MallowsCayleyEDA} \\
+MEDA-Ulam        & yes & \texttt{MallowsUlamEDA} (MCMC sampler) \\
+GMEDA-Kendall    & yes & \texttt{GMallowsKendallEDA} \\
+GMEDA-Cayley     & yes & \texttt{GMallowsCayleyEDA} \\
+Borda consensus         & yes & \texttt{find\_consensus\_borda} \\
+SetMedian consensus     & yes & \texttt{find\_consensus\_median} \\
+BestPermutation consensus & yes & \texttt{find\_consensus\_best} \\
+TSP, PFSP, LOP, QAP     & yes & \texttt{functions/} \\
+TSPLIB / Taillard / LOLIB / QAPLIB readers & yes & \texttt{utils/benchmark\_parsers.py} \\
+\midrule
+Kernels of Mallows models (Hamming) & --- & \texttt{HammingKMMEDA} \\
+Edge / node histogram models        & --- & \texttt{EHMEDA}, \texttt{NHMEDA} \\
+Plackett--Luce and mixtures         & --- & \texttt{PlackettLuceEDA}, \texttt{PlackettLuceMixtureEDA} \\
+Doubly stochastic matrix models     & --- & \texttt{DSMPSEDA}, \texttt{DSMASEDA} \\
+Bijective codings + UMDA/tree/Markov & --- & \texttt{representations/}, six wrappers \\
+Random-key EDAs                     & --- & \texttt{RKGaussianUMDAEDA}, \texttt{RKGaussianFullEDA}, \texttt{RKCopulaVinesEDA} \\
+Graph problems (MIS, MaxCut, MVC)   & --- & \texttt{functions/mis.py}, \texttt{maxcut.py}, \texttt{mvc.py} \\
+Multi-objective MEDA/D (nine models) & --- & \texttt{multiobjective/} \\
+Statistical comparison utilities    & --- & \texttt{utils/stats\_utils.py} \\
+\bottomrule
+\end{tabular}
+\caption{Coverage of \texttt{perm\_mateda} by \texttt{perm\_pateda}, and
+functionality added beyond it.}
+\label{tab:coverage}
+\end{table}
+
+Two differences with respect to the original toolbox deserve mention.  First,
+the Ulam sampler is a Metropolis--Hastings chain rather than the exact
+``distances sampler'' based on random standard Young tableaux; the exact sampler
+remains a planned addition.  Second, the estimation of $\theta$ for the Ulam
+distance uses the exact count of permutations at each distance only for
+$n \leq 8$, and a Gaussian approximation of that count for larger $n$.
+
+%% ============================================================
+\section{Conclusions}
+%% ============================================================
+
+\texttt{perm\_pateda} is a Python library of estimation of distribution
+algorithms for permutation-based combinatorial optimization.  It is built as a
+specialization of \texttt{pateda}: the EDA executor, the component architecture,
+selection, replacement, statistics and stopping conditions are inherited
+unchanged, and what the library contributes is the machinery that is specific to
+the symmetric group --- distances and their decompositions, central-permutation
+estimators, seventeen learning/sampling pairs covering distance-based,
+multistage, histogram, matrix-valued, coding-based and continuous-relaxation
+models, seven benchmark problems with their instance readers, and a
+decomposition-based multi-objective framework instantiated with nine models.
+
+Beyond reproducing the five distance-based EDAs of the \texttt{perm\_mateda}
+toolbox in Python, the library incorporates a set of developments that go beyond
+it:
+
+\begin{itemize}
+  \item kernels of Mallows models under the Hamming distance, with an explicit
+    exploration/exploitation schedule;
+  \item multistage models (Plackett--Luce) and their mixtures, learned with
+    spectral EM and sampled with the Gumbel-max trick;
+  \item doubly stochastic matrix models with two sampling strategies;
+  \item bijective codings of $\mathcal{S}_n$ that make the full catalogue of
+    discrete \texttt{pateda} models applicable to permutations without repair;
+  \item random-key EDAs that bring the continuous models --- including vine
+    copulas --- to bear on permutation problems;
+  \item graph problems reformulated under the permutation picture;
+  \item a multi-objective decomposition framework covering nine permutation
+    models;
+  \item instance readers and statistical comparison tools that make experimental
+    studies reproducible.
+\end{itemize}
+
+Ongoing work includes the exact Ulam sampler based on random standard Young
+tableaux, permutation-specific local search operators as first-class components,
+the integration of the Fourier-decomposition models currently kept in the
+companion \texttt{permutation\_fourier} project, and a validation of the
+parameter estimates and sampled-distance histograms against the reference outputs
+of the Matlab \texttt{perm\_mateda} toolbox.
+
+\bibliographystyle{abbrv}
+\bibliography{perm_pateda}
+
+\end{document}
