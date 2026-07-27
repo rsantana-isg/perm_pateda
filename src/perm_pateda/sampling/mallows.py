@@ -225,7 +225,7 @@ class SampleMallowsCayley:
             x_vector = (rand_values[i] >= x_probs).astype(int)
 
             # Generate permutation from x-vector
-            perm = _generate_perm_from_x(x_vector, n_vars)
+            perm = _generate_perm_from_x(x_vector, n_vars, rng)
 
             # Compose with consensus
             new_perm = compose_permutations(perm, consensus)
@@ -444,7 +444,7 @@ class SampleGeneralizedMallowsCayley:
                     x_vector[j] = 0
 
             
-            perm = _generate_perm_from_x(x_vector, n_vars)
+            perm = _generate_perm_from_x(x_vector, n_vars, rng)
 
             
             new_perm = compose_permutations(perm, consensus)
@@ -456,7 +456,8 @@ class SampleGeneralizedMallowsCayley:
 class SampleMallowsUlam:
     """Sample from Mallows model with Ulam distance using MCMC"""
  
-    def __init__(self, burn_in: int = 200, step_size: int = 20):
+    def __init__(self, burn_in: int = 1000, step_size: int = 100):
+        # Defaults match the user guide (Section 5.6) and the MallowsUlamEDA wrapper.
         self.burn_in = burn_in
         self.step_size = step_size
  
@@ -532,8 +533,8 @@ class SampleMallowsUlam:
         self, current_perm: np.ndarray, current_dist: float,
         consensus: np.ndarray, theta: float, n_vars: int, rng: np.random.Generator
     ):
-        # Swap de dos posiciones en lugar de delete+insert:
-        # evita crear dos arrays nuevos en cada paso (era O(n) en memoria).
+        # Random-transposition proposal (swap two positions) instead of a
+        # delete+insert move: avoids allocating two new arrays per step.
         i, j = rng.choice(n_vars, size=2, replace=False)
         prop_perm = current_perm.copy()
         prop_perm[i], prop_perm[j] = prop_perm[j], prop_perm[i]

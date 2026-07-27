@@ -138,19 +138,17 @@ class MEDA_D_NHM:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -472,19 +470,17 @@ class MEDA_D_EHM:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 

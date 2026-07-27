@@ -123,6 +123,10 @@ def compose_permutations(perm1: np.ndarray, perm2: np.ndarray) -> np.ndarray:
     """
     Compose two permutations: result[i] = perm2[perm1[i]]
 
+    Note on ordering: this returns ``perm2 ∘ perm1`` (perm1 applied first).  In
+    the user-guide notation where ``(σπ)(i) = σ(π(i))``, this is ``perm2·perm1``,
+    i.e. ``compose_permutations(perm1, perm2)`` plays the role of ``perm2 perm1``.
+
     Args:
         perm1: First permutation
         perm2: Second permutation

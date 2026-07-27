@@ -2,6 +2,7 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 from perm_pateda.representations.vinsertion import InsertionVectorRepresentation
+from perm_pateda.sampling.tree import SampleTree
 
 
 class SampleInsertionVectorUMDA:
@@ -163,4 +164,23 @@ def sample_insertion_vector_chain(
 ) -> np.ndarray:
 
     sampler = SampleInsertionVectorChain()
+    return sampler(n_vars, model, cardinality, population, fitness, sample_size, rng)
+
+
+class SampleInsertionVectorTree(SampleTree):
+    """Sample a Chow-Liu tree over the insertion-vector coding."""
+    def __init__(self):
+        super().__init__(InsertionVectorRepresentation())
+
+
+def sample_insertion_vector_tree(
+    n_vars: int,
+    model: Dict[str, Any],
+    cardinality: np.ndarray,
+    population: np.ndarray,
+    fitness: np.ndarray,
+    sample_size: int,
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    sampler = SampleInsertionVectorTree()
     return sampler(n_vars, model, cardinality, population, fitness, sample_size, rng)

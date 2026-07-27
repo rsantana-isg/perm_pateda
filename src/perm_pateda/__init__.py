@@ -17,7 +17,7 @@ Quick start::
     import numpy as np
 
     lop = create_random_lop(15, seed=0)
-    alg = MallowsKendallEDA(n_vars=15, fitness_func=lop.evaluate,
+    alg = MallowsKendallEDA(n_vars=15, fitness_func=lop,
                             pop_size=100, n_gen=50, random_seed=0)
     stats, _ = alg.run()
     print("Best:", stats.best_fitness_overall)
@@ -58,6 +58,8 @@ from perm_pateda.distances import (
 from perm_pateda.consensus import (
     find_consensus_borda,
     find_consensus_median,
+    find_consensus_best,
+    get_consensus,
 )
 
 from perm_pateda.utils.benchmark_parsers import (
@@ -101,11 +103,13 @@ __all__ = [
     "kendall_distance",
     "cayley_distance",
     "ulam_distance",
-    "hamming_distnce",
+    "hamming_distance",
     "compute_derangements",
     # Consensus
     "find_consensus_borda",
     "find_consensus_median",
+    "find_consensus_best",
+    "get_consensus",
     # Utils
     "parse_lolib",
     "parse_taillard_pfsp",

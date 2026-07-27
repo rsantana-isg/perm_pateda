@@ -26,8 +26,6 @@ class MEDA_D_PLACKETT_LUCE:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -46,7 +44,6 @@ class MEDA_D_PLACKETT_LUCE:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -64,7 +61,6 @@ class MEDA_D_PLACKETT_LUCE:
         self.n = n
         self.N = n_subproblems
         self.T = min(neighbourhood_size, n_subproblems)
-        self.theta = theta
         self.nr = nr
         self.scalarization = scalarization
         self.shake_threshold = shake_threshold
@@ -121,19 +117,17 @@ class MEDA_D_PLACKETT_LUCE:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -353,8 +347,6 @@ class MEDA_D_MIXTURE_PLACKETT_LUCE:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -373,7 +365,6 @@ class MEDA_D_MIXTURE_PLACKETT_LUCE:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -392,7 +383,6 @@ class MEDA_D_MIXTURE_PLACKETT_LUCE:
         self.n = n
         self.N = n_subproblems
         self.T = min(neighbourhood_size, n_subproblems)
-        self.theta = theta
         self.nr = nr
         self.scalarization = scalarization
         self.shake_threshold = shake_threshold
@@ -453,19 +443,17 @@ class MEDA_D_MIXTURE_PLACKETT_LUCE:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 

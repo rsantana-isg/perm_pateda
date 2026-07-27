@@ -119,8 +119,10 @@ class LearnMallowsKendall:
         """Calculate theta parameter using maximum likelihood estimation."""
         inv_consensus = np.argsort(consensus)
 
-        ##utilizo los mejores individuos maximo 30 para caluclar theta y asi ahorrar tiempo
-        max_samples_for_theta = min(30, population.shape[0])
+        # Use all selected individuals to estimate theta (matching the MLE
+        # described in the user guide, which matches the observed mean inversion
+        # vector over the whole selected set).
+        max_samples_for_theta = population.shape[0]
         sample_pop = population[:max_samples_for_theta]
         n_vars = population.shape[1]
         
@@ -155,16 +157,21 @@ class LearnMallowsKendall:
         return v
 
     def _expected_v_vector(self, theta: float, n: int) -> np.ndarray:
-        """Calculate expected v-vector under Mallows model with given theta."""
+        """Calculate expected v-vector under Mallows model with given theta.
+
+        For 0-indexed position ``j`` the inversion count V_j takes values in
+        {0, ..., n-j-1} (support size n-j), the *same* support used by the
+        sampling probability matrix (``_calculate_v_prob_matrix``).  Matching the
+        two supports keeps theta estimation and sampling consistent.
+        """
         expected_v = np.zeros(n)
 
         for j in range(n - 1):
-            # Expected value for position j
-            # E[v_j] = sum_{r=0}^{n-j} r * P(v_j = r)
-            psi_j = (1 - np.exp(-(n - j + 1) * theta)) / (1 - np.exp(-theta))
+            # Support of V_j is {0, ..., n-j-1}:  psi_j = sum_{r=0}^{n-j-1} e^{-r*theta}
+            psi_j = (1 - np.exp(-(n - j) * theta)) / (1 - np.exp(-theta))
 
             expected_val = 0.0
-            for r in range(n - j + 1):
+            for r in range(n - j):
                 prob_r = np.exp(-r * theta) / psi_j
                 expected_val += r * prob_r
 
@@ -349,9 +356,15 @@ class LearnMallowsCayley:
 
     def _calculate_x_prob_vector(self, psis: np.ndarray) -> np.ndarray:
         """
-        Calculate probability vector for x-vector values.
+        Probability vector consumed by SampleMallowsCayley.
 
-        For Cayley distance: P(x_j = 1) = 1 / Psi_j
+        NOTE ON CONVENTION: this returns ``1 / Psi_j``, which is **P(X_j = 0)**
+        (not P(X_j = 1)).  The sampler compensates by setting ``X_j = 1`` when
+        ``rand >= x_probs[j]``, so the effective sampled probability is
+        ``P(X_j = 1) = 1 - 1/Psi_j = (n-1-j) e^{-theta} / Psi_j`` — the correct
+        Mallows-Cayley marginal.  (The Generalized-Mallows-Cayley learner instead
+        stores P(X_j = 1) directly in column 1 of its matrix; see
+        LearnGeneralizedMallowsCayley._calculate_x_prob_matrix.)
         """
         x_probs = 1.0 / psis
         return x_probs
@@ -463,8 +476,8 @@ class LearnGeneralizedMallowsKendall:
         """Calculate theta parameters (one for each position) using MLE."""
         inv_consensus = np.argsort(consensus)
 
-        ##lo mismo que en el mallows kendall
-        max_samples_for_theta = min(30, population.shape[0])
+        # Use all selected individuals to estimate the per-position thetas.
+        max_samples_for_theta = population.shape[0]
         sample_pop = population[:max_samples_for_theta]
         
         v_vectors = []
@@ -479,17 +492,17 @@ class LearnGeneralizedMallowsKendall:
         thetas = np.zeros(n_vars - 1)
 
         for j in range(n_vars - 1):
-            def theta_function(theta):
-                n_j = n_vars - j
-                if abs(theta) < 1e-10:
-                    return n_j / 2.0 - v_mean[j]
-                
-                exp_theta = np.exp(-theta)
-                exp_nj1_theta = np.exp(-(n_j + 1) * theta)
-                if abs(1 - exp_nj1_theta) < 1e-10:
-                    expected_vj = n_j / 2.0
-                else:
-                    expected_vj = (n_j * exp_theta - exp_nj1_theta) / (1 - exp_nj1_theta) - 1.0
+            def theta_function(theta, j=j):
+                # V_j has support {0, ..., m} with m = n-j-1 (the same support
+                # used by the sampler's probability matrix).  Compute E[V_j]
+                # exactly over that support so estimation matches sampling.
+                m = n_vars - j - 1
+                if theta < 1e-12:
+                    return m / 2.0 - v_mean[j]
+                x = np.exp(-theta)
+                r = np.arange(m + 1)
+                w = x ** r
+                expected_vj = float(np.dot(r, w) / w.sum())
                 return expected_vj - v_mean[j]
 
             
@@ -648,28 +661,29 @@ class LearnGeneralizedMallowsCayley:
         thetas = np.zeros(n_vars - 1)
 
         for j in range(n_vars - 1):
-            # For Cayley distance with Generalized Mallows:
-            # P(X_j = 1) = 1 / Psi_j = 1 / ((n-j)*exp(-theta_j) + 1)
-            # E[X_j] = P(X_j = 1)
-            # So: x_mean[j] = 1 / ((n-j)*exp(-theta_j) + 1)
+            # For the Generalized Mallows model under the Cayley distance, the
+            # j-th decomposition term X_j can be set to 1 in m_j = (n - 1 - j)
+            # ways (this matches the number of choices made by the sampler in
+            # _generate_perm_from_x at position j), so
+            #     Psi_j       = 1 + m_j * exp(-theta_j)
+            #     P(X_j = 1)  = m_j * exp(-theta_j) / Psi_j
+            #     P(X_j = 0)  = 1 / Psi_j
+            # The MLE matches E[X_j] = P(X_j = 1) to the observed mean x_mean[j]:
+            #     x_mean = m_j e^{-theta} / (1 + m_j e^{-theta})
+            #   =>  theta_j = log( m_j * (1 - x_mean) / x_mean )
+            m_j = n_vars - 1 - j  # number of ways X_j = 1 (>= 1 for j = 0..n-2)
 
-            # Solving for theta_j:
-            # theta_j = -log((1/x_mean[j] - 1) / (n-j))
-
-            n_j = n_vars - j - 1  # Note: j ranges from 0 to n-2
-
-            if x_mean[j] > 0 and x_mean[j] < 1:
-                # Direct analytical solution
-                inner_val = (1.0 / x_mean[j] - 1.0) / (n_j + 1)
-                if inner_val > 0:
-                    theta_j = -np.log(inner_val)
-                    theta_j = np.clip(theta_j, 0.001, upper_theta)
-                else:
-                    theta_j = upper_theta
-            elif x_mean[j] >= 1:
+            xm = float(x_mean[j])
+            if xm <= 0.0:
+                # No dispersion observed at this position -> maximal concentration.
                 theta_j = upper_theta
-            else:
+            elif xm >= 1.0:
+                # Fully dispersed -> minimal spread parameter.
                 theta_j = 0.001
+            else:
+                inner_val = m_j * (1.0 - xm) / xm
+                theta_j = np.log(inner_val)
+                theta_j = np.clip(theta_j, 0.001, upper_theta)
 
             thetas[j] = theta_j
 
@@ -680,9 +694,10 @@ class LearnGeneralizedMallowsCayley:
         psis = np.zeros(n - 1)
 
         for j in range(n - 1):
-            # Psi_j = (n-j-1)*exp(-theta_j) + 1
-            n_j = n - j - 1
-            psis[j] = (n_j + 1) * np.exp(-thetas[j]) + 1
+            # Psi_j = 1 + m_j * exp(-theta_j), with m_j = n - 1 - j the number
+            # of ways X_j = 1 (consistent with _calculate_thetas and the sampler).
+            m_j = n - 1 - j
+            psis[j] = 1.0 + m_j * np.exp(-thetas[j])
 
         return psis
 
@@ -697,9 +712,10 @@ class LearnGeneralizedMallowsCayley:
         x_probs = np.zeros((n, 2))
 
         for j in range(n):
-            # P(X_j = 1) = 1 / Psi_j
-            prob_1 = 1.0 / psis[j]
-            prob_0 = 1.0 - prob_1
+            # Psi_j = 1 + m_j e^{-theta_j}, so P(X_j = 0) = 1 / Psi_j and
+            # P(X_j = 1) = m_j e^{-theta_j} / Psi_j = 1 - 1 / Psi_j.
+            prob_0 = 1.0 / psis[j]
+            prob_1 = 1.0 - prob_0
             x_probs[j, 0] = prob_0
             x_probs[j, 1] = prob_1
 
@@ -779,8 +795,8 @@ class LearnMallowsUlam:
         n_vars: int,
     ) -> float:
         """
-        Calcula theta buscando que la distancia esperada del modelo 
-        coincida con la distancia media observada en la población.
+        Estimate theta so that the model's expected Ulam distance matches the
+        mean Ulam distance observed in the selected population.
         """
         
         d_avg = np.mean([ulam_distance(p, consensus) for p in population])
@@ -815,8 +831,10 @@ class LearnMallowsUlam:
 
     def _get_ulam_distribution(self, n: int) -> np.ndarray:
         """
-        Obtiene el número de permutaciones a cada distancia de Ulam (Nd).
-        
+        Return the number of permutations at each Ulam distance (Nd).
+
+        Exact by enumeration for n <= 8; for larger n a Gaussian profile
+        centred at n - 2*sqrt(n) with variance n/4 is used as an approximation.
         """
         
         import math

@@ -4,15 +4,16 @@ Maximum Independent Set (MIS) for permutation-based EDAs
 The MIS problem asks for the largest subset of vertices in an undirected graph
 such that no two vertices in the subset are adjacent.
  
-Under the permutation picture, the problem is reformulated as finding a
-permutation of vertices π and a value k such that the first k vertices in π
-form an independent set, maximizing k.
- 
-The permutation-based objective is:
-    Maximize k  subject to  Tr(P A Pᵀ C(k)) = 0
- 
-where P is the permutation matrix of π, A is the adjacency matrix, and C(k)
-is the k×k upper-left block of ones (truncation matrix).
+Under the permutation picture (Min, 2024) the problem is expressed with a
+permutation of vertices and a prefix length k constrained by
+``Tr(P A Pᵀ C(k)) = 0`` (the first k vertices form an independent set).
+
+IMPLEMENTATION NOTE: rather than the strict "largest independent prefix", this
+class uses the slightly stronger GREEDY decoding: it scans the permutation and
+accumulates every vertex that is not adjacent to any already-selected vertex
+(skipping — not stopping at — conflicting vertices).  The fitness is the size of
+the resulting independent set.  This matches the user guide's description
+(Section 7.2) and never returns a smaller set than the strict prefix would.
  
 References:
     [1] Y. Min: "Permutation Picture of Graph Combinatorial Optimization Problems"
@@ -30,8 +31,9 @@ class MIS:
     Given an undirected graph G = (V, E), find the largest subset S ⊆ V
     such that no two vertices in S are adjacent.
  
-    Under the permutation picture, a permutation π of the vertices is
-    evaluated by finding the largest prefix of π that forms an independent set.
+    Under the permutation picture, a permutation π of the vertices is evaluated
+    by scanning it and greedily accumulating every vertex that is not adjacent
+    to any already-selected vertex; the fitness is the size of that set.
     """
  
     def __init__(self, adjacency_matrix: np.ndarray):
@@ -56,8 +58,8 @@ class MIS:
  
     def __call__(self, permutation: np.ndarray) -> float:
         """
-        Evaluate a permutation by finding the size of the independent set
-        formed by the largest valid prefix.
+        Evaluate a permutation by greedily accumulating vertices that are not
+        adjacent to any already-selected vertex, returning the size of that set.
  
         Args:
             permutation: A permutation of vertex indices (0-indexed or 1-indexed).
@@ -71,8 +73,9 @@ class MIS:
         if np.min(perm) == 1:
             perm = perm - 1
  
-        # Find the largest k such that perm[:k] is an independent set.
-        # Equivalent to checking Tr(P A Pᵀ C(k)) == 0 for increasing k.
+        # Greedy decoding: accumulate each vertex that is not adjacent to any
+        # already-selected vertex (conflicting vertices are skipped, not a
+        # stopping point).  Returns the size of the resulting independent set.
         independent_set = []
         for vertex in perm:
             # Check if vertex is adjacent to any already-selected vertex

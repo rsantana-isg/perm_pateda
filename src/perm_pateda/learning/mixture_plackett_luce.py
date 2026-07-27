@@ -431,27 +431,27 @@ def _weighted_lsr(
  
         M = np.zeros((n, n))
 
-        # Vectorizado: el triple bucle (ranking x posicion x loser) se
-        # reemplaza por suffix log-sum-exp con np.logaddexp y fancy indexing.
+        # Vectorized: the triple loop (ranking x position x loser) is replaced
+        # by a suffix log-sum-exp using np.logaddexp and fancy indexing.
         for l in range(m):
             if weights[l] < 1e-12:
                 continue
             perm = population[l]
             w_l = weights[l]
 
-            # Suffix log-sum-exp vectorizado - sin bucle Python interno
+            # Vectorized suffix log-sum-exp - no inner Python loop
             suffix_theta = theta[perm]
             suffix_lse = np.zeros(n)
             suffix_lse[-1] = suffix_theta[-1]
             for p in range(n - 2, -1, -1):
                 suffix_lse[p] = np.logaddexp(suffix_theta[p], suffix_lse[p + 1])
 
-            # contributions[p] = w_l / exp(suffix_lse[p])  para p = 0..n-2
+            # contributions[p] = w_l / exp(suffix_lse[p])  for p = 0..n-2
             denoms = np.exp(suffix_lse[:-1])
             contribs = np.where(denoms > 1e-300, w_l / denoms, 0.0)
 
-            # Acumular en M: para cada posicion p, perm[p] gana a perm[p+1:]
-            # M[loser, winner] += contribs[p]  - bucle solo sobre posiciones
+            # Accumulate into M: at each position p, perm[p] beats perm[p+1:]
+            # M[loser, winner] += contribs[p]  - loop over positions only
             for p in range(n - 1):
                 if contribs[p] == 0.0:
                     continue
@@ -472,12 +472,12 @@ def _weighted_lsr(
         row_sums_scaled = M_stoch.sum(axis=1)
         np.fill_diagonal(M_stoch, np.maximum(1.0 - row_sums_scaled, 0.0))
  
-        # Power iteration para la distribución estacionaria.
-        # Vectorizado: M_stoch ya es (n,n) numpy, cada paso es un matmul.
-        # Límite reducido de 200 → 50; la cadena converge en <20 pasos típicamente.
+        # Power iteration for the stationary distribution.
+        # Vectorized: M_stoch is an (n,n) numpy array, each step is a matmul.
+        # Capped at 50 iterations; the chain typically converges in < 20 steps.
         p_stat = np.ones(n) / n
         for _ in range(50):
-            p_new = p_stat @ M_stoch          # un solo matmul, sin bucle Python
+            p_new = p_stat @ M_stoch          # single matmul, no Python loop
             p_new = np.maximum(p_new, 1e-300)
             p_new /= p_new.sum()
             if np.linalg.norm(p_new - p_stat, 1) < 1e-8:
@@ -538,10 +538,10 @@ class LearnPlackettLuceMixture:
     def __init__(
         self,
         n_components: int = 2,
-        max_em_iter: int = 10,   # era 50 — 10 basta para convergencia en EDA
-        tol_em: float = 1e-4,   # era 1e-5 — menos preciso pero mucho más rápido
-        max_iter_lsr: int = 20,  # era 100 — LSR converge rápido con warm start
-        tol_lsr: float = 1e-4,  # era 1e-6
+        max_em_iter: int = 10,   # loose default: 10 EM steps suffice inside an EDA
+        tol_em: float = 1e-4,   # looser tolerance: less precise but much faster
+        max_iter_lsr: int = 20,  # LSR converges quickly with a warm start
+        tol_lsr: float = 1e-4,  # looser LSR tolerance
         use_spectral_init: bool = True,
         random_state: int = 0,
     ):
@@ -578,19 +578,26 @@ class LearnPlackettLuceMixture:
         cardinality: np.ndarray,
         population: np.ndarray,
         fitness: np.ndarray,
-        **kwargs,  # ignorados, los parámetros vienen del __init__
+        **kwargs,  # ignored; parameters come from __init__
     ) -> Dict[str, Any]:
         data = np.asarray(population, dtype=int)
         m, n = data.shape
-        K = self.n_components  
+        K = self.n_components
 
-        rng = np.random.default_rng(self.random_state)  # ← idem
+        # Vary the internal RNG per generation so the learner is not frozen to a
+        # single clustering/initialisation across the whole run, while staying
+        # reproducible for a given EDA seed.
+        if self.random_state is None:
+            gen_seed = None
+        else:
+            gen_seed = int(self.random_state) + int(generation)
+        rng = np.random.default_rng(gen_seed)
 
         # ----------------------------------------------------------------
         # Phase 1: Initialization
         # ----------------------------------------------------------------
         if self.use_spectral_init and m >= K * 2:
-            theta, _ = _spectral_init(data, K, random_state=self.random_state)
+            theta, _ = _spectral_init(data, K, random_state=gen_seed)
         else:
             theta = rng.standard_normal((n, K))
             theta -= theta.mean(axis=0, keepdims=True)
@@ -600,7 +607,7 @@ class LearnPlackettLuceMixture:
         # ----------------------------------------------------------------
         # Phase 2: EM iterations
         # ----------------------------------------------------------------
-        for em_iter in range(self.max_em_iter):  # ← self
+        for em_iter in range(self.max_em_iter):
             beta_old = beta.copy()
 
             # E-step
@@ -614,12 +621,12 @@ class LearnPlackettLuceMixture:
             # M-step
             theta = _m_step(
                 data, q, theta,
-                self.max_iter_lsr,  # ← self
-                self.tol_lsr,       # ← self
+                self.max_iter_lsr,
+                self.tol_lsr,
             )
 
             # Convergencia
-            if np.linalg.norm(beta - beta_old, 1) < self.tol_em:  # ← self
+            if np.linalg.norm(beta - beta_old, 1) < self.tol_em:
                 break
 
         # ----------------------------------------------------------------

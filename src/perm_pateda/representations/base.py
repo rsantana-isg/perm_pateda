@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 class PermutationRepresentation(ABC):
-    """Clase base abstracta para representaciones factorizadas en perm_pateda."""
+    """Abstract base class for factorized permutation representations in perm_pateda."""
     
     @abstractmethod
     def encode(self, perm: np.ndarray) -> np.ndarray:
@@ -16,5 +16,5 @@ class PermutationRepresentation(ABC):
     
     @abstractmethod
     def get_domain(self, n: int) -> list:
-        """Devuelve el valor máximo permitido (inclusivo) en cada posición i."""
+        """Return the maximum allowed value (inclusive) at each position i."""
         pass

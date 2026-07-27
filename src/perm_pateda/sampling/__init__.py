@@ -27,9 +27,15 @@ from perm_pateda.sampling.plackett_luce import SamplePlackettLuce
 from perm_pateda.sampling.mixture_plackett_luce import SamplePlackettLuceMixture
 from perm_pateda.sampling.hamming_kmm import SampleHammingKMM 
 
-from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree
-from perm_pateda.sampling.fisher_yates import SampleFisherYatesUMDA, SampleFisherYatesTree
-from perm_pateda.sampling.vinsertion import  SampleInsertionVectorUMDA, SampleInsertionVectorChain
+from perm_pateda.sampling.markov import SampleMarkov
+from perm_pateda.sampling.tree import SampleTree
+from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree, SampleLehmerMarkov
+from perm_pateda.sampling.fisher_yates import (
+    SampleFisherYatesUMDA, SampleFisherYatesTree, SampleFisherYatesMarkov,
+)
+from perm_pateda.sampling.vinsertion import (
+    SampleInsertionVectorUMDA, SampleInsertionVectorChain, SampleInsertionVectorTree,
+)
 
 
 __all__ = [
@@ -48,15 +54,19 @@ __all__ = [
     "SampleGeneralizedMallowsCayley",
     "sample_mallows_kendall",
     "sample_mallows_cayley",
-    "sample_mallows_ulam"
-    "SamplePlackettLuce"
+    "sample_mallows_ulam",
+    "SamplePlackettLuce",
     "SamplePlackettLuceMixture",
     "SampleHammingKMM",
+    "SampleMarkov",
+    "SampleTree",
     "SampleLehmerUMDA",
     "SampleLehmerTree",
+    "SampleLehmerMarkov",
     "SampleFisherYatesUMDA",
     "SampleFisherYatesTree",
+    "SampleFisherYatesMarkov",
     "SampleInsertionVectorUMDA",
     "SampleInsertionVectorChain",
-
+    "SampleInsertionVectorTree",
 ]

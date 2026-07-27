@@ -2,6 +2,7 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 from perm_pateda.representations.fisher_yates import FisherYatesRepresentation
+from perm_pateda.sampling.markov import SampleMarkov
 
 
 class SampleFisherYatesUMDA:
@@ -214,4 +215,23 @@ def sample_fisher_yates_tree(
     return sampler(
         n_vars, model, cardinality, population, fitness, sample_size, rng, cyclic
     )
+
+
+class SampleFisherYatesMarkov(SampleMarkov):
+    """Sample a first-order Markov chain over the Fisher-Yates draws."""
+    def __init__(self):
+        super().__init__(FisherYatesRepresentation())
+
+
+def sample_fisher_yates_markov(
+    n_vars: int,
+    model: Dict[str, Any],
+    cardinality: np.ndarray,
+    population: np.ndarray,
+    fitness: np.ndarray,
+    sample_size: int,
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    sampler = SampleFisherYatesMarkov()
+    return sampler(n_vars, model, cardinality, population, fitness, sample_size, rng)
  

@@ -6,22 +6,22 @@ from perm_pateda.distances import hamming_distance, compute_derangements
 
 def _compute_theta_from_expected_distance(expected_dist: float, n: int) -> float:
     """
-    Encuentra θ tal que E[K] bajo Hamming MM = expected_dist,
-    usando búsqueda binaria sobre θ.
+    Find theta such that E[K] under the Hamming MM equals expected_dist,
+    using bisection over theta.
     """
-    # S(n,k) = C(n,k) * D(k), número de permutaciones a distancia k
+    # S(n,k) = C(n,k) * D(k), number of permutations at distance k
     derangements = compute_derangements(n)
     s_nk = np.array([comb(n, k, exact=True) * derangements[k] for k in range(n + 1)])
 
     def compute_expected_dist(theta):
         log_weights = np.log(s_nk + 1e-300) - theta * np.arange(n + 1)
-        log_weights[1] = -np.inf  # k=1 imposible en Hamming
+        log_weights[1] = -np.inf  # k=1 is impossible under Hamming
         log_weights -= np.max(log_weights)
         weights = np.exp(log_weights)
         weights /= weights.sum()
         return np.dot(weights, np.arange(n + 1))
 
-    # Búsqueda binaria
+    # Bisection
     lo, hi = 0.0, 20.0
     for _ in range(60):
         mid = (lo + hi) / 2
@@ -34,19 +34,19 @@ def _compute_theta_from_expected_distance(expected_dist: float, n: int) -> float
 
 class LearnHammingKMM:
     """
-    Kernels of Mallows Model bajo distancia Hamming.
+    Kernels of Mallows Model under the Hamming distance.
 
-    El 'modelo' aprendido es:
-      - Las propias soluciones seleccionadas como centros
-      - θ calculado a partir de E[K] que decrece exponencialmente
+    The learned 'model' consists of:
+      - The selected solutions themselves as centres
+      - theta computed from an exponentially decaying E[K]
     """
 
     def __init__(
         self,
-        expected_dist_start: float = None,   # E[K]_0, por defecto n/2
+        expected_dist_start: float = None,   # E[K]_0, default n/2
         expected_dist_end: float = 0.25,     # E[K]_tmax
-        gamma: float = 5.14,                 # velocidad de decaimiento
-        n_gen: int = 50,                     # total de generaciones
+        gamma: float = 5.14,                 # decay rate
+        n_gen: int = 50,                     # total number of generations
     ):
         self.expected_dist_start = expected_dist_start
         self.expected_dist_end = expected_dist_end
@@ -66,7 +66,7 @@ class LearnHammingKMM:
         e0 = self.expected_dist_start if self.expected_dist_start is not None else n_vars / 2
         e_end = self.expected_dist_end
 
-        # Progreso exponencial: delta(p) = (exp(-gamma*p) - 1) / (exp(-gamma) - 1)
+        # Exponential progress: delta(p) = (exp(-gamma*p) - 1) / (exp(-gamma) - 1)
         p = generation / max(self.n_gen, 1)
         delta = (np.exp(-self.gamma * p) - 1) / (np.exp(-self.gamma) - 1)
         expected_dist = e_end + delta * (e0 - e_end)
@@ -75,7 +75,7 @@ class LearnHammingKMM:
         theta = _compute_theta_from_expected_distance(expected_dist, n_vars)
 
         return {
-            "centers": population.copy(),   # todas las seleccionadas son centros
+            "centers": population.copy(),   # all selected solutions are centres
             "theta": theta,
             "expected_dist": expected_dist,
             "n_vars": n_vars,

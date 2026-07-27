@@ -59,14 +59,22 @@ from perm_pateda.sampling.hamming_kmm import SampleHammingKMM
 from perm_pateda.learning.dsm import LearnDSM
 from perm_pateda.sampling.dsm import SampleDSMPS, SampleDSMAS
 
-from perm_pateda.learning.lehmer import LearnLehmerUMDA, LearnLehmerTree
-from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree
+from perm_pateda.learning.lehmer import LearnLehmerUMDA, LearnLehmerTree, LearnLehmerMarkov
+from perm_pateda.sampling.lehmer import SampleLehmerUMDA, SampleLehmerTree, SampleLehmerMarkov
 
-from perm_pateda.learning.fisher_yates import LearnFisherYatesUMDA, LearnFisherYatesTree
-from perm_pateda.sampling.fisher_yates import SampleFisherYatesUMDA, SampleFisherYatesTree
+from perm_pateda.learning.fisher_yates import (
+    LearnFisherYatesUMDA, LearnFisherYatesTree, LearnFisherYatesMarkov,
+)
+from perm_pateda.sampling.fisher_yates import (
+    SampleFisherYatesUMDA, SampleFisherYatesTree, SampleFisherYatesMarkov,
+)
 
-from perm_pateda.learning.vinsertion import LearnInsertionVectorUMDA, LearnInsertionVectorChain
-from perm_pateda.sampling.vinsertion import SampleInsertionVectorUMDA, SampleInsertionVectorChain
+from perm_pateda.learning.vinsertion import (
+    LearnInsertionVectorUMDA, LearnInsertionVectorChain, LearnInsertionVectorTree,
+)
+from perm_pateda.sampling.vinsertion import (
+    SampleInsertionVectorUMDA, SampleInsertionVectorChain, SampleInsertionVectorTree,
+)
 
 
 
@@ -105,6 +113,10 @@ class _PermEDA:
         self.elitism = elitism
         self.rng = np.random.default_rng(random_seed)
         self._card = _dummy_cardinality(n_vars)
+        # Extra keyword arguments forwarded to the learner every generation
+        # (e.g. consensus_method / theta bounds for the Mallows and GM models).
+        # Empty by default; model-specific wrappers populate it.
+        self._learn_params: dict = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -116,8 +128,9 @@ class _PermEDA:
     def _learn(self, gen: int, population: np.ndarray, fitness: np.ndarray):
         """Call the learner.  Subclasses may override."""
         learner = self._learner  # type: ignore[attr-defined]
+        params = self._learn_params
         if hasattr(learner, 'learn'):
-            return learner.learn(gen, self.n_vars, self._card, population, fitness)
+            return learner.learn(gen, self.n_vars, self._card, population, fitness, **params)
         # fall back to __call__
         return learner(
             generation=gen,
@@ -125,6 +138,7 @@ class _PermEDA:
             cardinality=self._card,
             selected_pop=population,
             selected_fitness=fitness,
+            **params,
         )
 
     def _sample(self, model, current_pop: np.ndarray = None) -> np.ndarray:
@@ -327,10 +341,20 @@ class MallowsKendallEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        consensus_method: str = "borda",
+        initial_theta: float = 0.1,
+        upper_theta: float = 10.0,
+        max_iter: int = 100,
     ):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self._learner = LearnMallowsKendall()
         self._sampler = SampleMallowsKendall()
+        self._learn_params = {
+            "consensus_method": consensus_method,
+            "initial_theta": initial_theta,
+            "upper_theta": upper_theta,
+            "max_iter": max_iter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -358,10 +382,20 @@ class MallowsCayleyEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        consensus_method: str = "borda",
+        initial_theta: float = 0.1,
+        upper_theta: float = 10.0,
+        max_iter: int = 100,
     ):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self._learner = LearnMallowsCayley()
         self._sampler = SampleMallowsCayley()
+        self._learn_params = {
+            "consensus_method": consensus_method,
+            "initial_theta": initial_theta,
+            "upper_theta": upper_theta,
+            "max_iter": max_iter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -390,10 +424,20 @@ class GMallowsKendallEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        consensus_method: str = "borda",
+        initial_theta: float = 0.1,
+        upper_theta: float = 10.0,
+        max_iter: int = 100,
     ):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self._learner = LearnGeneralizedMallowsKendall()
         self._sampler = SampleGeneralizedMallowsKendall()
+        self._learn_params = {
+            "consensus_method": consensus_method,
+            "initial_theta": initial_theta,
+            "upper_theta": upper_theta,
+            "max_iter": max_iter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -421,10 +465,20 @@ class GMallowsCayleyEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        consensus_method: str = "borda",
+        initial_theta: float = 0.1,
+        upper_theta: float = 10.0,
+        max_iter: int = 100,
     ):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self._learner = LearnGeneralizedMallowsCayley()
         self._sampler = SampleGeneralizedMallowsCayley()
+        self._learn_params = {
+            "consensus_method": consensus_method,
+            "initial_theta": initial_theta,
+            "upper_theta": upper_theta,
+            "max_iter": max_iter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -488,7 +542,7 @@ class PlackettLuceMixtureEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
-        n_components: int = 2,  # ¡Parámetro exclusivo de nuestro algoritmo!
+        n_components: int = 2,  # extra parameter specific to the mixture model
     ):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self.n_components = n_components
@@ -546,12 +600,22 @@ class MallowsUlamEDA(_PermEDA):
         random_seed: Optional[int] = None,
         burn_in: int = 1000,
         step_size: int = 100,
+        consensus_method: str = "borda",
+        initial_theta: float = 0.1,
+        upper_theta: float = 10.0,
+        max_iter: int = 100,
     ):
         super().__init__(
             n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed
         )
         self._learner = LearnMallowsUlam()
         self._sampler = SampleMallowsUlam(burn_in=burn_in, step_size=step_size)
+        self._learn_params = {
+            "consensus_method": consensus_method,
+            "initial_theta": initial_theta,
+            "upper_theta": upper_theta,
+            "max_iter": max_iter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -696,8 +760,7 @@ class DSMASEDA(_PermEDA):
     
 class LehmerUmdaEDA(_PermEDA):
     """
-    EDA Univariado basado en la representación del Código de Lehmer.
-    Aprende un modelo UMDA independiente.
+    Univariate EDA over the Lehmer-code representation (independent UMDA model).
     """
     def __init__(
         self,
@@ -716,8 +779,7 @@ class LehmerUmdaEDA(_PermEDA):
 
 class LehmerTreeEDA(_PermEDA):
     """
-    Tree-EDA (Chow-Liu) basado en la representación del Código de Lehmer.
-    Aprende dependencias en forma de árbol.
+    Chow-Liu Tree-EDA over the Lehmer-code representation (tree-shaped dependencies).
     """
     def __init__(
         self,
@@ -742,7 +804,7 @@ class LehmerTreeEDA(_PermEDA):
 
 class FisherYatesUmdaEDA(_PermEDA):
     """
-    EDA Univariado basado en la representación de Fisher-Yates.
+    Univariate EDA over the Fisher-Yates representation.
     """
     def __init__(
         self,
@@ -761,7 +823,7 @@ class FisherYatesUmdaEDA(_PermEDA):
 
 class FisherYatesTreeEDA(_PermEDA):
     """
-    Tree-EDA (Chow-Liu) basado en la representación de Fisher-Yates.
+    Chow-Liu Tree-EDA over the Fisher-Yates representation.
     """
     def __init__(
         self,
@@ -786,7 +848,7 @@ class FisherYatesTreeEDA(_PermEDA):
 
 class InsertionVectorUmdaEDA(_PermEDA):
     """
-    EDA Univariado basado en la representación del Vector de Inserción.
+    Univariate EDA over the insertion-vector representation.
     """
     def __init__(
         self,
@@ -805,7 +867,7 @@ class InsertionVectorUmdaEDA(_PermEDA):
 
 class InsertionVectorMarkovEDA(_PermEDA):
     """
-    EDA basado en Cadenas de Markov sobre el Vector de Inserción.
+    EDA based on a first-order Markov chain over the insertion vector.
     """
     def __init__(
         self,
@@ -821,3 +883,67 @@ class InsertionVectorMarkovEDA(_PermEDA):
         super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
         self._learner = LearnInsertionVectorChain(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleInsertionVectorChain()
+
+
+class LehmerMarkovEDA(_PermEDA):
+    """First-order Markov chain EDA over the Lehmer-code representation.
+
+    Models the code as P(c_0) * prod_{i>=1} P(c_i | c_{i-1}); it sits between the
+    univariate LehmerUmdaEDA and the Chow-Liu LehmerTreeEDA in the amount of
+    dependency it captures.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnLehmerMarkov(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleLehmerMarkov()
+
+
+class FisherYatesMarkovEDA(_PermEDA):
+    """First-order Markov chain EDA over the Fisher-Yates representation."""
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnFisherYatesMarkov(laplace_smoothing=laplace_smoothing)
+        self._sampler = SampleFisherYatesMarkov()
+
+
+class InsertionVectorTreeEDA(_PermEDA):
+    """Chow-Liu Tree-EDA over the insertion-vector representation.
+
+    Complements InsertionVectorUmdaEDA (univariate) and InsertionVectorMarkovEDA
+    (first-order chain) with a learned tree-structured dependency model.
+    """
+    def __init__(
+        self,
+        n_vars: int,
+        fitness_func: Callable,
+        pop_size: int = 100,
+        n_gen: int = 50,
+        selection_ratio: float = 0.5,
+        elitism: bool = True,
+        random_seed: Optional[int] = None,
+        laplace_smoothing: float = 0.01,
+        root: int = 0,
+    ):
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        self._learner = LearnInsertionVectorTree(laplace_smoothing=laplace_smoothing, root=root)
+        self._sampler = SampleInsertionVectorTree()

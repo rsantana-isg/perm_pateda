@@ -136,19 +136,17 @@ class MEDA_D_MK:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -183,13 +181,20 @@ class MEDA_D_MK:
     # ------------------------------------------------------------------
 
     def _generate_candidate(self, centre: np.ndarray) -> np.ndarray:
-        model = self._learner(
-            generation=self._gen,
-            n_vars=self.n,
-            cardinality=np.arange(self.n),
-            selected_pop=centre.reshape(1, -1),
-            selected_fitness=np.array([1.0]),
-        )
+        # Mallows kernel centred on the incumbent, using the FIXED spread
+        # parameter self.theta (UG Section 8.4) rather than a theta learned from
+        # the single centre.  The psi constants and x-probabilities are built
+        # with the same (correct) Cayley formulas used by LearnMallowsCayley, so
+        # SampleMallowsCayley consumes them unchanged.
+        psis = self._learner._calculate_psi_constants(self.theta, self.n)
+        x_probs = self._learner._calculate_x_prob_vector(psis)
+        model = {
+            "x_probs": x_probs,
+            "consensus": np.asarray(centre, dtype=int).copy(),
+            "theta": self.theta,
+            "psis": psis,
+            "model_type": "mallows_cayley",
+        }
         samples = self._sampler(
             n_vars=self.n,
             model=model,
@@ -358,8 +363,6 @@ class MEDA_D_KENDALL:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -378,7 +381,6 @@ class MEDA_D_KENDALL:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -452,19 +454,17 @@ class MEDA_D_KENDALL:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -683,8 +683,6 @@ class MEDA_D_ULAM:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -703,7 +701,6 @@ class MEDA_D_ULAM:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -779,19 +776,17 @@ class MEDA_D_ULAM:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -1010,8 +1005,6 @@ class MEDA_D_GMKENDALL:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -1030,7 +1023,6 @@ class MEDA_D_GMKENDALL:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -1104,19 +1096,17 @@ class MEDA_D_GMKENDALL:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 
@@ -1336,8 +1326,6 @@ class MEDA_D_GMCAYLEY:
         Number of weight vectors / subproblems (N in the paper).
     neighbourhood_size : int
         T – how many closest weight vectors form each neighbourhood.
-    theta : float
-        Spread parameter for the Mallows Kernel (fixed across generations).
     nr : int
         Maximum number of neighbours a new solution can replace.
     scalarization : str
@@ -1356,7 +1344,6 @@ class MEDA_D_GMCAYLEY:
         n: int,
         n_subproblems: int = 50,
         neighbourhood_size: int = 10,
-        theta: float = 1.0,
         nr: int = 2,
         scalarization: str = "tchebycheff",
         shake_threshold: int = 20,
@@ -1430,19 +1417,17 @@ class MEDA_D_GMCAYLEY:
     def _weighted_sum_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         return float(np.dot(weight, normalised))
 
     def _tchebycheff_normalised(self, obj_vals, weight):
         z = self.reference_point
         w = self.worst_point
-        alpha = 0.6
         denom = w - z
         denom = np.where(np.abs(denom) < 1e-12, 1.0, denom)
-        normalised = (obj_vals - alpha * z) / denom
+        normalised = (obj_vals - z) / denom
         wt = np.where(weight > 1e-10, weight, 1e-10)
         return float(np.max(wt * normalised))
 

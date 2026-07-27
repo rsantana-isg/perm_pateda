@@ -12,7 +12,7 @@ References:
 """
 
 import numpy as np
-from typing import Union
+from typing import Optional, Union
 
 
 def kendall_distance(perm1: np.ndarray, perm2: np.ndarray) -> int:
@@ -106,8 +106,12 @@ def cayley_distance(perm1: np.ndarray, perm2: np.ndarray) -> int:
     # Compose perm1 with inverse of perm2
     composition = perm1[invperm2]
 
-    # Calculate the x-vector and sum it
-    return int(np.sum(_x_vector(composition)))
+    # Calculate the cycle-based decomposition vector X and sum it.
+    # The Cayley distance equals n - (number of cycles), which is exactly the
+    # sum of the X decomposition vector (X_j = 0 iff j is the largest item in
+    # its cycle, 1 otherwise).  The fixed-point indicator (_x_vector) is NOT the
+    # Cayley distance: it overcounts by one for every cycle of length >= 3.
+    return int(np.sum(_x_vector_cycles(composition)))
 
 
 def _x_vector(perm: np.ndarray) -> np.ndarray:
@@ -236,7 +240,7 @@ def hamming_distance(perm1: np.ndarray, perm2: np.ndarray) -> int:
     return int(np.sum(perm1 != perm2))
 
 def compute_derangements(n: int) -> np.ndarray:
-    """D[k] = número de desarreglos de tamaño k."""
+    """D[k] = number of derangements of size k (D[0]=1, D[1]=0)."""
     D = np.zeros(n + 1, dtype=object)
     D[0] = 1
     if n >= 1:
@@ -290,7 +294,9 @@ def _x_vector_cycles(perm: np.ndarray) -> np.ndarray:
     return x[:-1]
 
 
-def _generate_perm_from_x(x: np.ndarray, n: int) -> np.ndarray:
+def _generate_perm_from_x(
+    x: np.ndarray, n: int, rng: Optional[np.random.Generator] = None
+) -> np.ndarray:
     """
     Generate a random permutation from an x-vector (inverse of x_vector_cycles).
 
@@ -307,12 +313,17 @@ def _generate_perm_from_x(x: np.ndarray, n: int) -> np.ndarray:
         [1] E. Irurozki, B. Calvo, J.A Lozano: Sampling and learning mallows
             and generalized mallows models under the cayley distance. Tech. Rep., 2013
     """
+    # Use the provided Generator so that sampling is reproducible under a fixed
+    # seed; fall back to a fresh default generator only when none is supplied.
+    if rng is None:
+        rng = np.random.default_rng()
+
     perm = np.arange(n, dtype=int)  # Start with identity permutation [0, 1, 2, ..., n-1]
 
     for pos in range(n - 1):
         if x[pos] == 1:
             # Randomly swap position 'pos' with a position in range [pos+1, n-1]
-            random_pos = np.random.randint(pos + 1, n)
+            random_pos = int(rng.integers(pos + 1, n))
             perm[pos], perm[random_pos] = perm[random_pos], perm[pos]
 
     return perm

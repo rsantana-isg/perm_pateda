@@ -29,7 +29,12 @@ def _load_first(candidates: Tuple[Tuple[str, str], ...]) -> Any:
         except (ImportError, AttributeError):
             continue
     names = ", ".join(f"{m}.{a}" for m, a in candidates)
-    raise ImportError(f"Could not load any of: {names}")
+    raise ImportError(
+        "Could not load any of the required pateda symbols: "
+        f"{names}. This usually means the installed 'pateda' version is "
+        "incompatible (the symbol was renamed/moved). Check that a compatible "
+        "pateda is installed and expose one of the names listed above."
+    )
 
 
 def _instantiate_sampler(sampler_cls: Any, n_samples: int) -> Any:

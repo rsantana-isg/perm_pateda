@@ -72,8 +72,10 @@ class LearnEHM:
         # Initialize edge histogram matrix
         ehm = np.zeros((n_vars, n_vars))
 
-        # Count edges in all permutations
-        # Edge from position i to position i+1 (including wrap-around)
+        # Count edges (transitions) between consecutive positions, i.e. the
+        # ordered pair (sigma(j), sigma(j+1)) for j = 0 .. n-2.  This follows
+        # user guide Eq. (11) and does NOT include the wrap-around edge
+        # sigma(n-1) -> sigma(0).
         for perm in selected_pop:
             for j in range(n_vars - 1):
                 # Convert to 0-indexed if needed

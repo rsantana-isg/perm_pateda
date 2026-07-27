@@ -7,6 +7,7 @@ import numpy as np
 from typing import Dict, Any, Optional
 
 from perm_pateda.representations.lehmer import LehmerRepresentation
+from perm_pateda.sampling.markov import SampleMarkov
 
 
 class SampleLehmerUMDA:
@@ -177,6 +178,25 @@ def sample_lehmer_tree(
     sample_size: int,
     rng: Optional[np.random.Generator] = None,
 ) -> np.ndarray:
-    
+
     sampler = SampleLehmerTree()
+    return sampler(n_vars, model, cardinality, population, fitness, sample_size, rng)
+
+
+class SampleLehmerMarkov(SampleMarkov):
+    """Sample a first-order Markov chain over the right-Lehmer code."""
+    def __init__(self):
+        super().__init__(LehmerRepresentation(left=False))
+
+
+def sample_lehmer_markov(
+    n_vars: int,
+    model: Dict[str, Any],
+    cardinality: np.ndarray,
+    population: np.ndarray,
+    fitness: np.ndarray,
+    sample_size: int,
+    rng: Optional[np.random.Generator] = None,
+) -> np.ndarray:
+    sampler = SampleLehmerMarkov()
     return sampler(n_vars, model, cardinality, population, fitness, sample_size, rng)

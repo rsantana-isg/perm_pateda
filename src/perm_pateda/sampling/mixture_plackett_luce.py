@@ -51,9 +51,9 @@ class SamplePlackettLuceMixture:
         Args:
             n_vars:      Permutation length
             model:       Dictionary returned by LearnPlackettLuceMixture
-            cardinality: Not used, kept para compatibilidad con interfaz
-            population:  Not used, kept para compatibilidad con interfaz
-            fitness:     Not used, kept para compatibilidad con interfaz
+            cardinality: Not used, kept for interface compatibility
+            population:  Not used, kept for interface compatibility
+            fitness:     Not used, kept for interface compatibility
             sample_size: Number of permutations to generate
             rng:         Random generator passed by _PermEDA
         Returns:
@@ -65,7 +65,7 @@ class SamplePlackettLuceMixture:
 
         samples = np.zeros((sample_size, n_vars), dtype=int)
 
-        # Elegir componente para cada muestra
+        # Choose a component for each sample
         Z = rng.choice(K, size=sample_size, p=beta)
 
         # Gumbel-max trick

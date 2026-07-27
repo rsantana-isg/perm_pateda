@@ -3,6 +3,7 @@ from typing import Dict, Any
 
 from perm_pateda.representations.vinsertion import InsertionVectorRepresentation
 from perm_pateda.learning.umda import LearnUMDA
+from perm_pateda.learning.tree import LearnTree
 
 
 class LearnInsertionVectorUMDA:
@@ -24,9 +25,31 @@ class LearnInsertionVectorUMDA:
 def learn_insertion_vector_umda(*args, **kwargs) -> Dict[str, Any]:
     return LearnInsertionVectorUMDA()(*args, **kwargs)
 
+
+class LearnInsertionVectorTree:
+    """Chow-Liu tree over the insertion-vector coding."""
+    def __init__(self, laplace_smoothing: float = 0.01, root: int = 0, **kwargs):
+        self.rep = InsertionVectorRepresentation()
+        self.laplace_smoothing = laplace_smoothing
+        self.root = root
+        self.learner = LearnTree(representation=self.rep, model_type="vinsertion_tree")
+
+    def learn(self, generation: int, n_vars: int, cardinality: np.ndarray, population: np.ndarray, fitness: np.ndarray, **kwargs) -> Dict[str, Any]:
+        return self.__call__(generation, n_vars, cardinality, population, fitness, **kwargs)
+
+    def __call__(self, generation: int, n_vars: int, cardinality: np.ndarray, selected_pop: np.ndarray, selected_fitness: np.ndarray, **kwargs) -> Dict[str, Any]:
+        return self.learner(
+            generation, n_vars, cardinality, selected_pop, selected_fitness,
+            laplace_alpha=self.laplace_smoothing, root=self.root, **kwargs
+        )
+
+
+def learn_insertion_vector_tree(*args, **kwargs) -> Dict[str, Any]:
+    return LearnInsertionVectorTree()(*args, **kwargs)
+
 class LearnInsertionVectorChain:
     """
-    EDA basado en Cadenas de Markov sobre el Vector de Inserción.
+    EDA based on a first-order Markov chain over the insertion vector.
     """
     def __init__(self, laplace_smoothing: float = 0.01, **kwargs):
         self._repr = InsertionVectorRepresentation()
@@ -57,10 +80,10 @@ class LearnInsertionVectorChain:
         cardinality: np.ndarray,
         selected_pop: np.ndarray,
         selected_fitness: np.ndarray,
-        laplace_alpha: float = None, # Valor de fallback
+        laplace_alpha: float = None, # fallback value
         **kwargs,
     ) -> Dict[str, Any]:
-        # Usamos laplace_smoothing guardado en el init si laplace_alpha no se ha sobrescrito
+        # Use the laplace_smoothing stored at init unless laplace_alpha overrides it
         alpha = laplace_alpha if laplace_alpha is not None else self.laplace_smoothing
 
         selected_pop = np.atleast_2d(selected_pop)
@@ -75,7 +98,7 @@ class LearnInsertionVectorChain:
             prev_domain = domain_sizes[i - 1]  
             curr_domain = domain_sizes[i]       
  
-            # Usamos alpha (el suavizado)
+            # Use alpha (the smoothing)
             counts = np.full((prev_domain, curr_domain), alpha, dtype=float)
  
             for k in range(m):
@@ -103,7 +126,7 @@ def learn_insertion_vector_chain(
     selected_fitness: np.ndarray,
     **params,
 ) -> Dict[str, Any]:
-    # Pasamos params al init si es necesario
+    # Forward params to the init if needed
     learner = LearnInsertionVectorChain(**params)
     return learner(
         generation, n_vars, cardinality, selected_pop, selected_fitness, **params
