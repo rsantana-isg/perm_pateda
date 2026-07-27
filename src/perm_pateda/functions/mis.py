@@ -6,15 +6,19 @@ such that no two vertices in the subset are adjacent.
  
 Under the permutation picture (Min, 2024) the problem is expressed with a
 permutation of vertices and a prefix length k constrained by
-``Tr(P A Pᵀ C(k)) = 0`` (the first k vertices form an independent set).
+``Tr(P A Pᵀ C(k)) = 0`` (the first k vertices form an independent set), where
+C(k) is the k×k upper-left block of ones.  The objective is to maximize k.
 
-IMPLEMENTATION NOTE: rather than the strict "largest independent prefix", this
-class uses the slightly stronger GREEDY decoding: it scans the permutation and
-accumulates every vertex that is not adjacent to any already-selected vertex
-(skipping — not stopping at — conflicting vertices).  The fitness is the size of
-the resulting independent set.  This matches the user guide's description
-(Section 7.2) and never returns a smaller set than the strict prefix would.
- 
+DECODER: this class uses the strict permutation-picture (prefix) decoder: the
+fitness of a permutation is the length of its longest independent *prefix*, i.e.
+the largest k such that the first k vertices are pairwise non-adjacent
+(``Tr(P A Pᵀ C(k)) = 0``).  Scanning left to right, this is the position of the
+first vertex adjacent to an earlier one.  This is consistent with the decoders of
+MVC and MaxCut and with Min (2024); its optimum equals the maximum independent
+set size, but (unlike a greedy accumulation decoder) it forces an entire
+independent set to be placed contiguously at the front, giving a harder,
+discriminating search landscape.
+
 References:
     [1] Y. Min: "Permutation Picture of Graph Combinatorial Optimization Problems"
         arXiv:2410.17111v1 [cs.AI], 2024. Section 4.2.
@@ -32,8 +36,8 @@ class MIS:
     such that no two vertices in S are adjacent.
  
     Under the permutation picture, a permutation π of the vertices is evaluated
-    by scanning it and greedily accumulating every vertex that is not adjacent
-    to any already-selected vertex; the fitness is the size of that set.
+    by the length of its longest independent *prefix*: the largest k such that
+    the first k vertices π(0),...,π(k-1) are pairwise non-adjacent.
     """
  
     def __init__(self, adjacency_matrix: np.ndarray):
@@ -56,55 +60,56 @@ class MIS:
         self.adjacency_matrix = adjacency_matrix.astype(float)
         self.n = adjacency_matrix.shape[0]
  
+    def _prefix_length(self, perm: np.ndarray) -> int:
+        """Length of the longest independent prefix of ``perm`` (0-indexed).
+
+        Returns the largest k such that the induced subgraph on the first k
+        vertices has no edge, i.e. the position of the first vertex adjacent to
+        an earlier one (or n if the whole permutation is independent).
+        """
+        A_perm = self.adjacency_matrix[np.ix_(perm, perm)]
+        for k in range(1, self.n):
+            # Vertex at position k breaks the prefix if it is adjacent to any of
+            # the vertices at positions 0..k-1.
+            if A_perm[k, :k].sum() > 0:
+                return k
+        return self.n
+
     def __call__(self, permutation: np.ndarray) -> float:
         """
-        Evaluate a permutation by greedily accumulating vertices that are not
-        adjacent to any already-selected vertex, returning the size of that set.
- 
+        Evaluate a permutation by the length of its longest independent prefix
+        (the strict permutation-picture decoder, Tr(P A Pᵀ C(k)) = 0).
+
         Args:
             permutation: A permutation of vertex indices (0-indexed or 1-indexed).
- 
+
         Returns:
-            k: Size of the independent set found (positive, higher is better).
+            k: Size of the independent prefix (positive, higher is better).
         """
         perm = np.array(permutation, dtype=int)
- 
+
         # Convert to 0-indexed if needed
         if np.min(perm) == 1:
             perm = perm - 1
- 
-        # Greedy decoding: accumulate each vertex that is not adjacent to any
-        # already-selected vertex (conflicting vertices are skipped, not a
-        # stopping point).  Returns the size of the resulting independent set.
-        independent_set = []
-        for vertex in perm:
-            # Check if vertex is adjacent to any already-selected vertex
-            if all(self.adjacency_matrix[vertex, v] == 0 for v in independent_set):
-                independent_set.append(vertex)
- 
-        return float(len(independent_set))
- 
+
+        return float(self._prefix_length(perm))
+
     def evaluate_independent_set(self, permutation: np.ndarray) -> list:
         """
-        Return the actual independent set (list of vertices) found by the
-        permutation.
- 
+        Return the actual independent set (the longest independent prefix) found
+        by the permutation.
+
         Args:
             permutation: A permutation of vertex indices.
- 
+
         Returns:
-            List of vertex indices forming the independent set.
+            List of vertex indices forming the independent set (prefix).
         """
         perm = np.array(permutation, dtype=int)
         if np.min(perm) == 1:
             perm = perm - 1
- 
-        independent_set = []
-        for vertex in perm:
-            if all(self.adjacency_matrix[vertex, v] == 0 for v in independent_set):
-                independent_set.append(vertex)
- 
-        return independent_set
+
+        return perm[: self._prefix_length(perm)].tolist()
  
     def is_valid_independent_set(self, vertices: list) -> bool:
         """

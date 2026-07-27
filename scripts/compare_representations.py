@@ -15,7 +15,9 @@ Problems (7 types, up to 3 instances each)
     TSP, PFSP, LOP, QAP  and the permutation-picture graph problems
     MIS (maximum independent set), MaxCut, MVC (minimum vertex cover).
 Each type contributes up to ``--max-instances`` instances of different sizes,
-so the study spans a broad set of problems (18 instances by default).
+so the study spans a broad set of problems (21 instances by default).  All three
+graph problems use the strict permutation-picture (prefix) decoder, so on large
+sparse/dense instances they discriminate between the algorithms.
 
 Output
 ------
@@ -84,13 +86,22 @@ PROBLEM_SPECS = {
     "PFSP":   [(15, 5), (20, 5), (20, 10)],
     "LOP":    [15, 20, 25],
     "QAP":    [10, 12, 15],
-    "MIS":    [15, 20],
-    "MaxCut": [15, 20],
-    "MVC":    [15, 20],
+    # Graph problems: sizes enlarged ~2-5x and per-type densities tuned so the
+    # instances stop being trivially saturated (the small sparse defaults were
+    # solved to optimality by every algorithm).  All three now use the strict
+    # permutation-picture (prefix) decoder.  Empirically:
+    #   * MaxCut discriminates on DENSE graphs (p=0.5);
+    #   * MIS and MVC discriminate on SPARSE, large graphs (p=0.1): the prefix
+    #     decoder must place a whole independent set / vertex cover contiguously,
+    #     which is a genuinely hard ordering problem there.
+    # MaxCut is kept a bit smaller because its evaluation is O(n^3) per solution.
+    "MIS":    [60, 80, 100],
+    "MaxCut": [30, 45, 60],
+    "MVC":    [60, 80, 100],
 }
 
-# Edge probabilities for the random graph problems.
-_GRAPH_P = {"MIS": 0.3, "MaxCut": 0.5, "MVC": 0.4}
+# Edge probabilities for the random graph problems (tuned per type, see above).
+_GRAPH_P = {"MIS": 0.1, "MaxCut": 0.5, "MVC": 0.1}
 
 
 def _make_instance(ptype: str, cfg, seed: int) -> dict:
