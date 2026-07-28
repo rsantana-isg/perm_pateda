@@ -23,7 +23,7 @@ Quick start::
     print("Best:", stats.best_fitness_overall)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 __author__ = "Roberto Santana (roberto.santana@ehu.eus)"
 
 # Plug-and-play permutation EDA wrappers
