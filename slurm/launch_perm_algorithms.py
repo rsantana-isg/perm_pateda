@@ -1,102 +1,105 @@
-#!/usr/bin/env python3
-"""Generate sbatch commands for the permutation-EDA benchmark on a cluster.
+"""
+Generate sbatch commands for the permutation-EDA benchmark (one job per
+combination of seed, problem, instance and algorithm).
 
-Prints one ``sbatch slurm/slurm_perm_algs.sh ...`` line per
-``(problem, instance, algorithm, seed)`` combination, looping over:
-
+Loops over:
     * seeds       1 .. 20
     * problems    LOP, QAP, PFSP, TSP
-    * instances   every instance of each problem found under the benchmark dir
-                  (the same 30-per-type lists used by
-                  scripts/compare_representations2.py)
-    * algorithms  all algorithms of scripts/compare_representations2.py
-                  (= compare_representations.build_algorithms: 9 bijective-coding
-                  + 7 permutation-distribution models = 16 algorithms)
+    * instances   every instance file found under <benchmark_dir>/{LOP,QAP,PFSP,TSP}/
+    * algorithms  the 16 algorithms of scripts/compare_representations2.py
+                  (9 bijective-coding + 7 permutation-distribution models)
 
 Fixed run parameters: pop=400, gen=60, selection_ratio=0.5.
 
-Full grid = 4 problems x 30 instances x 16 algorithms x 20 seeds = 38400 jobs.
-The launcher is NON-DESTRUCTIVE: it only prints commands.  Keep <= 400 jobs
-running simultaneously, e.g. submit in slices or by family::
+Full default grid = 4 problems x 30 instances x 16 algorithms x 20 seeds = 38400
+jobs.  Keep <= 400 jobs running simultaneously, e.g. submit in slices or by
+family::
 
     python3 slurm/launch_perm_algorithms.py | head -400 | bash
     python3 slurm/launch_perm_algorithms.py | sed -n '401,800p' | bash
     python3 slurm/launch_perm_algorithms.py | grep ' LOP '  | bash
     python3 slurm/launch_perm_algorithms.py | grep ' Mallows-K ' | bash
 
-The benchmark directory (root holding LOP/ QAP/ PFSP/ TSP subfolders) defaults to
-``Instances`` (relative to the repository root); override with the environment
-variable ``PERM_BENCHMARK_DIR``.  Instances whose files are absent are skipped
-(reported on stderr), so re-running after adding files only emits the new jobs.
+Run this from the submission directory (the one holding scripts/, slurm/,
+Instances/, results/ and outputs/).  This launcher is self-contained (standard
+library only), so plain ``python3`` runs it; the jobs themselves launch Python
+through ``bnd -exec`` (see slurm/slurm_perm_algs.sh), which uses the project's
+pipenv environment where perm_pateda is installed.
 
-Before the FIRST submission, create the SLURM log directory (its
-``#SBATCH --output=outputs/...`` path is resolved by SLURM before the job body's
-own ``mkdir`` runs)::
+The benchmark directory (root holding LOP/ QAP/ PFSP/ TSP subfolders) defaults to
+``Instances``; override with the environment variable ``PERM_BENCHMARK_DIR``.
+
+Before the first submission, make sure outputs/ and results/ exist::
 
     mkdir -p outputs results
-
-After all jobs finish, harvest results/perm_*.dat for analysis.
 """
+
 import os
 import sys
 from pathlib import Path
 
-# Make the sibling scripts importable to reuse the exact instance lists and the
-# algorithm registry, so the cluster grid matches the local comparison scripts.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(_REPO_ROOT / "scripts"))
-import argparse  # noqa: E402
-from compare_representations2 import (  # noqa: E402
-    LOP_INSTANCES, QAP_INSTANCES, PFSP_INSTANCES, TSP_INSTANCES, _LOADERS,
-)
-from compare_representations import build_algorithms  # noqa: E402
-
-
 # Fixed run parameters (as requested).
-POP_SIZE = 400
-N_GEN = 60
+POP_SIZE = 1000
+N_GEN = 250
 SEL_RATIO = 0.5
-SEEDS = range(1, 21)                       # 1 .. 20
+SEEDS = range(6, 11)                     # 1 .. 20
 
 SBATCH_SCRIPT = "slurm/slurm_perm_algs.sh"
+
+# Resolve the project root (the dir holding slurm/ and Instances/) from this
+# file's location, so the launcher works regardless of the current directory.
+ROOT = Path(__file__).resolve().parent.parent
 BENCHMARK_DIR = os.environ.get("PERM_BENCHMARK_DIR", "Instances")
 
-PROBLEMS = {
-    "LOP": LOP_INSTANCES,
-    "QAP": QAP_INSTANCES,
-    "PFSP": PFSP_INSTANCES,
-    "TSP": TSP_INSTANCES,
+# The 16 algorithms of scripts/compare_representations.build_algorithms
+# (9 bijective-coding models + 7 permutation-distribution models).
+ALGORITHMS = [
+    "Lehmer-UMDA", "Lehmer-Tree", "Lehmer-Markov",
+    "FY-UMDA", "FY-Tree", "FY-Markov",
+    "IV-UMDA", "IV-Tree", "IV-Markov",
+    "Mallows-K", "Mallows-C", "GM-C", "PL", "EHM", "NHM", "DSM-AS",
+]
+
+# Problem type -> (subfolder, instance-file extension); mirrors the loaders in
+# scripts/compare_representations2.py.
+PROBLEM_LAYOUT = {
+    "LOP": ("LOP", ""),
+    "QAP": ("QAP", ".qap"),
+    "PFSP": ("PFSP", ".fsp"),
+    "TSP": ("TSP", ".tsp"),
 }
 
-ALGORITHMS = [label for label, _cls, _extra in
-              build_algorithms(argparse.Namespace(laplace=0.01))]
+
+def instances_for(problem: str) -> list:
+    """Instance names (without extension) discovered on disk for a problem type."""
+    subdir, ext = PROBLEM_LAYOUT[problem]
+    folder = ROOT / BENCHMARK_DIR / subdir
+    if not folder.is_dir():
+        print(f"# missing folder: {folder}", file=sys.stderr)
+        return []
+    names = []
+    for f in sorted(folder.iterdir()):
+        if not f.is_file() or f.name.startswith("."):
+            continue                     # skip hidden/junk files (e.g. .DS_Store)
+        if ext:
+            if f.name.endswith(ext):
+                names.append(f.name[: -len(ext)])
+        else:
+            names.append(f.name)         # LOP files have no extension
+    return names
 
 
-def _instance_path(problem: str, instance: str) -> Path:
-    _names, subdir, ext, _loader = _LOADERS[problem]
-    return _REPO_ROOT / BENCHMARK_DIR / subdir / f"{instance}{ext}"
-
-
-def main() -> None:
+if __name__ == "__main__":
     n_jobs = 0
-    n_missing = 0
     try:
-        for problem, instances in PROBLEMS.items():
-            for instance in instances:
-                if not _instance_path(problem, instance).exists():
-                    n_missing += 1
-                    print(f"# missing: {_instance_path(problem, instance)}", file=sys.stderr)
-                    continue
+        for problem in PROBLEM_LAYOUT:
+            for instance in instances_for(problem):
                 for alg in ALGORITHMS:
                     for seed in SEEDS:
                         print(f"sbatch {SBATCH_SCRIPT} {seed} {alg} {problem} "
                               f"{instance} {BENCHMARK_DIR} {POP_SIZE} {N_GEN} {SEL_RATIO}")
                         n_jobs += 1
-    except BrokenPipeError:            # e.g. when piping through `head`
-        return
-    print(f"# emitted {n_jobs} sbatch commands "
-          f"({n_missing} instance(s) skipped as missing)", file=sys.stderr)
-
-
-if __name__ == "__main__":
-    main()
+    except BrokenPipeError:               # e.g. when piping through `head`
+        pass
+    else:
+        print(f"# emitted {n_jobs} sbatch commands", file=sys.stderr)
