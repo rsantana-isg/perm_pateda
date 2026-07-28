@@ -1,0 +1,21 @@
+# Runtime requirements for perm_pateda
+# -----------------------------------
+# Install with:  pip install -r requirements.txt
+# (see pyproject.toml for the packaged metadata; this file is the flat,
+#  pip-installable view used for environments / CI / clusters.)
+
+# --- Core (always required) ---------------------------------------------------
+numpy>=1.21
+scipy>=1.7            # >=1.7 needed for scipy.stats.studentized_range (CD diagrams)
+
+# --- Feature dependencies (needed by parts of the library) --------------------
+scikit-learn>=1.0     # KMeans in the spectral init of the Plackett-Luce mixture
+                      #   (learning/mixture_plackett_luce.py, PlackettLuceMixtureEDA)
+pandas>=1.3           # statistical comparison utilities (utils/stats_utils.py)
+matplotlib>=3.4       # figures: CD diagrams, boxplots, evolution/convergence plots
+pateda>=0.2.5
+
+# --- Optional ----------------------------------------------------------------
+# Required only by the vine-copula random-key EDA (RKCopulaVinesEDA), which calls
+# pateda's vine-copula learner/sampler.  Uncomment if you use that algorithm:
+pyvinecopulib>=0.6

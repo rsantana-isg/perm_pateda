@@ -93,6 +93,10 @@ def run_with_history(
     history["best_fitness"].append(best_fit)
     history["mean_fitness"].append(float(np.mean(fitness)))
     history["diversity"].append(positional_entropy(population))
+    # Also expose the final best solution and its (internal, maximised) fitness so
+    # single-experiment runners can report them without a second run.
+    history["best_individual"] = np.asarray(best_ind, dtype=int).tolist()
+    history["best_fitness_overall"] = float(best_fit)
     return history
 
 
