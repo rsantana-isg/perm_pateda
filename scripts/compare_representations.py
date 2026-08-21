@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Compare permutation EDAs across many permutation problems and instances.
 
-Algorithms (16)
+Algorithms (18)
 ---------------
 1. Bijective-coding EDAs -- the full 3 x 3 grid:
        Lehmer / Fisher-Yates / insertion vector  x  UMDA / Tree (Chow-Liu) / Markov
 2. EDAs with permutation-based probability distributions on the symmetric group:
-       Mallows-Kendall, Mallows-Cayley, Generalized-Mallows-Cayley,
+       Mallows-Kendall, Mallows-Cayley, Mallows-Ulam,
+       Generalized-Mallows-Kendall, Generalized-Mallows-Cayley,
        Plackett-Luce, edge histogram (EHM), node histogram (NHM),
        doubly stochastic matrix (DSM-AS).
 
@@ -70,7 +71,8 @@ from perm_pateda.algorithms import (
 )
 # EDAs with permutation-based probability distributions
 from perm_pateda import (
-    MallowsKendallEDA, MallowsCayleyEDA, GMallowsCayleyEDA,
+    MallowsKendallEDA, MallowsCayleyEDA, MallowsUlamEDA,
+    GMallowsKendallEDA, GMallowsCayleyEDA,
     PlackettLuceEDA, EHMEDA, NHMEDA, DSMASEDA,
 )
 
@@ -165,13 +167,15 @@ def build_algorithms(args: argparse.Namespace) -> list:
         ("IV-Markov",     InsertionVectorMarkovEDA, lap),
     ]
     distribution = [
-        ("Mallows-K", MallowsKendallEDA, {}),
-        ("Mallows-C", MallowsCayleyEDA,  {}),
-        ("GM-C",      GMallowsCayleyEDA, {}),
-        ("PL",        PlackettLuceEDA,   {}),
-        ("EHM",       EHMEDA,            {}),
-        ("NHM",       NHMEDA,            {}),
-        ("DSM-AS",    DSMASEDA,          {}),
+        ("Mallows-K", MallowsKendallEDA,  {}),
+        ("Mallows-C", MallowsCayleyEDA,   {}),
+        ("Mallows-U", MallowsUlamEDA,     {}),
+        ("GM-K",      GMallowsKendallEDA, {}),
+        ("GM-C",      GMallowsCayleyEDA,  {}),
+        ("PL",        PlackettLuceEDA,    {}),
+        ("EHM",       EHMEDA,             {}),
+        ("NHM",       NHMEDA,             {}),
+        ("DSM-AS",    DSMASEDA,           {}),
     ]
     return coding + distribution
 
@@ -419,7 +423,7 @@ def main() -> int:
     results_dir = os.path.join(repo_root, "results")
 
     print("Permutation EDA comparison")
-    print(f"  {len(algorithms)} algorithms (9 bijective-coding + 7 permutation-distribution models)")
+    print(f"  {len(algorithms)} algorithms (9 bijective-coding + 9 permutation-distribution models)")
     print(f"  {len(problems)} instances across {len(PROBLEM_SPECS)} problem types "
           f"(<= {args.max_instances} instances/type): "
           f"{', '.join(p['name'] for p in problems)}")
