@@ -76,6 +76,7 @@ from perm_pateda.sampling.vinsertion import (
     SampleInsertionVectorUMDA, SampleInsertionVectorChain, SampleInsertionVectorTree,
 )
 
+from perm_pateda.representations import InverseRepresentation, StandardRepresentation
 
 
 
@@ -104,6 +105,7 @@ class _PermEDA:
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        representation = None,
     ):
         self.n_vars = n_vars
         self.fitness_func = fitness_func
@@ -116,6 +118,13 @@ class _PermEDA:
         # Extra keyword arguments forwarded to the learner every generation
         # (e.g. consensus_method / theta bounds for the Mallows and GM models).
         # Empty by default; model-specific wrappers populate it.
+        
+
+        if representation is None:
+            self.representation = StandardRepresentation()
+        else:
+            self.representation = representation
+
         self._learn_params: dict = {}
 
     # ------------------------------------------------------------------
@@ -123,7 +132,8 @@ class _PermEDA:
     # ------------------------------------------------------------------
 
     def _evaluate(self, population: np.ndarray) -> np.ndarray:
-        return np.array([self.fitness_func(population[i]) for i in range(len(population))])
+        decoded_pop = self.representation.decode(population)
+        return np.array([self.fitness_func(decoded_pop[i]) for i in range(len(decoded_pop))])
 
     def _learn(self, gen: int, population: np.ndarray, fitness: np.ndarray):
         """Call the learner.  Subclasses may override."""
@@ -179,64 +189,54 @@ class _PermEDA:
     # ------------------------------------------------------------------
 
     def run(self, verbose: bool = False) -> Tuple[Statistics, Cache]:
-        """
-        Execute the permutation EDA.
-
-        Returns
-        -------
-        stats : Statistics
-        cache : Cache
-        """
         stats = Statistics()
         cache = Cache()
         n_select = max(2, int(self.pop_size * self.selection_ratio))
 
-        # Initial population
         seeder = PermutationInit()
-        population = seeder.seed(self.n_vars, self.pop_size, self._card, rng=self.rng)
+        raw_population = seeder.seed(self.n_vars, self.pop_size, self._card, rng=self.rng)
+        population = self.representation.encode(raw_population)
         fitness = self._evaluate(population)
 
         best_idx = int(np.argmax(fitness))
-        best_ind = population[best_idx].copy()
+        decoded_pop = self.representation.decode(population)
+        best_ind = decoded_pop[best_idx].copy()
         best_fit = float(fitness[best_idx])
 
         for gen in range(self.n_gen):
-            stats.update(gen, population, fitness.reshape(-1, 1))
+            stats.update(gen, decoded_pop, fitness.reshape(-1, 1))
 
             if verbose:
                 print(f"Gen {gen}: best={stats.best_fitness[-1]:.4f} "
                       f"mean={stats.mean_fitness[-1]:.4f}")
 
-            # Truncation selection
             sorted_idx = np.argsort(fitness)[::-1]
             selected = population[sorted_idx[:n_select]]
             sel_fit = fitness[sorted_idx[:n_select]]
 
-            # Learn model
             model = self._learn(gen, selected, sel_fit)
 
-            # Sample new population
             new_pop = self._sample(model, current_pop=population)
             new_fit = self._evaluate(new_pop)
 
-            # Elitism: keep global best
+            decoded_new_pop = self.representation.decode(new_pop)
+
             if self.elitism:
                 new_best_idx = int(np.argmax(new_fit))
                 if best_fit > new_fit[new_best_idx]:
                     worst_idx = int(np.argmin(new_fit))
-                    new_pop[worst_idx] = best_ind.copy()
+                    new_pop[worst_idx] = self.representation.encode(best_ind.reshape(1, -1))[0]
                     new_fit[worst_idx] = best_fit
                 else:
                     best_fit = float(new_fit[new_best_idx])
-                    best_ind = new_pop[new_best_idx].copy()
+                    best_ind = decoded_new_pop[new_best_idx].copy()
 
             population = new_pop
             fitness = new_fit
+            decoded_pop = decoded_new_pop
 
-        # Final generation
-        stats.update(self.n_gen, population, fitness.reshape(-1, 1))
+        stats.update(self.n_gen, decoded_pop, fitness.reshape(-1, 1))
         return stats, cache
-
 
 # ---------------------------------------------------------------------------
 # EHMEDA
@@ -277,8 +277,9 @@ class EHMEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnEHM()
         self._sampler = SampleEHM()
 
@@ -309,8 +310,9 @@ class NHMEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnNHM()
         self._sampler = SampleNHM()
 
@@ -345,8 +347,9 @@ class MallowsKendallEDA(_PermEDA):
         initial_theta: float = 0.1,
         upper_theta: float = 10.0,
         max_iter: int = 100,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnMallowsKendall()
         self._sampler = SampleMallowsKendall()
         self._learn_params = {
@@ -386,8 +389,9 @@ class MallowsCayleyEDA(_PermEDA):
         initial_theta: float = 0.1,
         upper_theta: float = 10.0,
         max_iter: int = 100,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnMallowsCayley()
         self._sampler = SampleMallowsCayley()
         self._learn_params = {
@@ -428,8 +432,9 @@ class GMallowsKendallEDA(_PermEDA):
         initial_theta: float = 0.1,
         upper_theta: float = 10.0,
         max_iter: int = 100,
+        representation = None
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnGeneralizedMallowsKendall()
         self._sampler = SampleGeneralizedMallowsKendall()
         self._learn_params = {
@@ -469,8 +474,9 @@ class GMallowsCayleyEDA(_PermEDA):
         initial_theta: float = 0.1,
         upper_theta: float = 10.0,
         max_iter: int = 100,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnGeneralizedMallowsCayley()
         self._sampler = SampleGeneralizedMallowsCayley()
         self._learn_params = {
@@ -510,8 +516,9 @@ class PlackettLuceEDA(_PermEDA):
         selection_ratio: float = 0.5,
         elitism: bool = True,
         random_seed: Optional[int] = None,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnPlackettLuce()
         self._sampler = SamplePlackettLuce()
 
@@ -543,8 +550,9 @@ class PlackettLuceMixtureEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         n_components: int = 2,  # extra parameter specific to the mixture model
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self.n_components = n_components
         self._learner = LearnPlackettLuceMixture(
             n_components=n_components,
@@ -571,9 +579,9 @@ class HammingKMMEDA(_PermEDA):
         expected_dist_start: Optional[float] = None,
         expected_dist_end: float = 0.25,
         gamma: float = 5.14,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen,
-                         selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnHammingKMM(
             expected_dist_start=expected_dist_start,
             expected_dist_end=expected_dist_end,
@@ -604,10 +612,9 @@ class MallowsUlamEDA(_PermEDA):
         initial_theta: float = 0.1,
         upper_theta: float = 10.0,
         max_iter: int = 100,
+        representation = None,
     ):
-        super().__init__(
-            n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed
-        )
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnMallowsUlam()
         self._sampler = SampleMallowsUlam(burn_in=burn_in, step_size=step_size)
         self._learn_params = {
@@ -671,8 +678,9 @@ class DSMPSEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         alpha: Optional[float] = None,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._alpha = alpha
         self._learner = LearnDSM()
         self._sampler = SampleDSMPS()
@@ -742,8 +750,9 @@ class DSMASEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         alpha: Optional[float] = None,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._alpha = alpha
         self._learner = LearnDSM()
         self._sampler = SampleDSMAS()
@@ -772,8 +781,9 @@ class LehmerUmdaEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnLehmerUMDA(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleLehmerUMDA()
 
@@ -792,8 +802,9 @@ class LehmerTreeEDA(_PermEDA):
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
         root: int = 0,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnLehmerTree(laplace_smoothing=laplace_smoothing, root=root)
         self._sampler = SampleLehmerTree()
 
@@ -816,8 +827,9 @@ class FisherYatesUmdaEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnFisherYatesUMDA(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleFisherYatesUMDA()
 
@@ -836,8 +848,9 @@ class FisherYatesTreeEDA(_PermEDA):
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
         root: int = 0,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnFisherYatesTree(laplace_smoothing=laplace_smoothing, root=root)
         self._sampler = SampleFisherYatesTree()
 
@@ -860,8 +873,9 @@ class InsertionVectorUmdaEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnInsertionVectorUMDA(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleInsertionVectorUMDA()
 
@@ -879,8 +893,9 @@ class InsertionVectorMarkovEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnInsertionVectorChain(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleInsertionVectorChain()
 
@@ -902,8 +917,9 @@ class LehmerMarkovEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnLehmerMarkov(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleLehmerMarkov()
 
@@ -920,8 +936,9 @@ class FisherYatesMarkovEDA(_PermEDA):
         elitism: bool = True,
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnFisherYatesMarkov(laplace_smoothing=laplace_smoothing)
         self._sampler = SampleFisherYatesMarkov()
 
@@ -943,7 +960,8 @@ class InsertionVectorTreeEDA(_PermEDA):
         random_seed: Optional[int] = None,
         laplace_smoothing: float = 0.01,
         root: int = 0,
+        representation = None,
     ):
-        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed)
+        super().__init__(n_vars, fitness_func, pop_size, n_gen, selection_ratio, elitism, random_seed, representation)
         self._learner = LearnInsertionVectorTree(laplace_smoothing=laplace_smoothing, root=root)
         self._sampler = SampleInsertionVectorTree()

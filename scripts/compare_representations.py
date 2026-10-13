@@ -53,6 +53,7 @@ import os
 import time
 import warnings
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from perm_pateda.representations import StandardRepresentation, InverseRepresentation
 
 import numpy as np
 from scipy.stats import friedmanchisquare, rankdata
@@ -152,6 +153,8 @@ def build_problems(args: argparse.Namespace) -> list:
     return problems
 
 
+
+
 def build_algorithms(args: argparse.Namespace) -> list:
     """Return a list of (label, EDA class, extra_kwargs) triples."""
     lap = {"laplace_smoothing": args.laplace}
@@ -177,7 +180,17 @@ def build_algorithms(args: argparse.Namespace) -> list:
         ("NHM",       NHMEDA,             {}),
         ("DSM-AS",    DSMASEDA,           {}),
     ]
-    return coding + distribution
+    all_base = coding + distribution
+    expanded = []
+    
+    for label, cls, extra in all_base:
+        std_extra = {**extra, "representation": StandardRepresentation()}
+        expanded.append((label, cls, std_extra))
+        
+        inv_extra = {**extra, "representation": InverseRepresentation()}
+        expanded.append((f"{label}-Inv", cls, inv_extra))
+        
+    return expanded
 
 
 def parse_args() -> argparse.Namespace:
@@ -357,7 +370,7 @@ def boxplot(problems, results, labels, path):
     for ax, prob in zip(axes, problems):
         data = [np.array(results[prob["name"]][label]["natural"], dtype=float) for label in labels]
         data = [d[~np.isnan(d)] for d in data]
-        ax.boxplot(data, labels=labels, showmeans=True)
+        ax.boxplot(data, tick_labels=labels, showmeans=True)
         ax.set_title(f"{prob['name']} ({prob['unit']})", fontsize=9)
         ax.tick_params(axis="x", rotation=90, labelsize=6)
     for ax in axes[n:]:

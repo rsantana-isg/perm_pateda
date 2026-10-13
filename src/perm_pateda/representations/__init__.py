@@ -9,10 +9,14 @@ from perm_pateda.representations.base import PermutationRepresentation
 from perm_pateda.representations.lehmer import LehmerRepresentation
 from perm_pateda.representations.fisher_yates import FisherYatesRepresentation
 from perm_pateda.representations.vinsertion import InsertionVectorRepresentation
+from perm_pateda.representations.inverse.base import InverseRepresentation
+from perm_pateda.representations.standard.base import StandardRepresentation
 
 __all__ = [
     "PermutationRepresentation",
     "LehmerRepresentation",
     "FisherYatesRepresentation",
     "InsertionVectorRepresentation",
+    "InverseRepresentation",
+    "StandardRepresentation"
 ]
