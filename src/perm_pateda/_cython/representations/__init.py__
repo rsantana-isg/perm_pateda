@@ -1,0 +1,5 @@
+from .lehmer import LehmerRepresentation
+
+__all__ = [
+    "LehmerRepresentation",
+]

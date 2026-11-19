@@ -1,0 +1,25 @@
+from . import distances
+from . import consensus
+from . import learning
+from . import sampling
+
+__version__ = "0.2.2"
+__author__ = "Julen Benages (jbenages001@ikasle.ehu.eus)"
+
+__all__ = [
+    "distances",
+    "consensus",
+    "learning",
+    "sampling",
+    "algorithms",
+    "MallowsKendallEDA",
+    "GMallowsKendallEDA",
+    "PlackettLuceEDA",
+]
+
+from perm_pateda._cython.algorithms.permutation import(
+    MallowsKendallEDA,
+    GMallowsKendallEDA,
+    PlackettLuceEDA
+)
+
